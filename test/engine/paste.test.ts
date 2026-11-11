@@ -5,6 +5,7 @@ import type { CodeChunk } from "../../src/engine";
 const chunk: CodeChunk = {
   language: "python",
   targetFile: "app/config.py",
+  newFile: true,
   code: `import os
 
 def load_key() -> str:
@@ -66,7 +67,7 @@ console.log("listening");`;
   });
 
   it("never triggers for a Code Chunk that is a single line", () => {
-    const oneLine: CodeChunk = { language: "python", targetFile: "app/main.py", code: 'print("hello")' };
+    const oneLine: CodeChunk = { language: "python", targetFile: "app/main.py", code: 'print("hello")', newFile: true };
     expect(looksLikePastedChunk('print("hello")', oneLine)).toBe(false);
   });
 });

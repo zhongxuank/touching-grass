@@ -21,7 +21,13 @@ describe("loadTrack", () => {
     expect(lesson.steps.map((s) => s.title)).toEqual(["Say hello", "Read a key"]);
     const step = lesson.steps[0]!;
     expect(step.explanation).toBe("Print a greeting so you know the project runs.");
-    expect(step.codeChunk).toEqual({ language: "python", targetFile: "app/main.py", code: 'print("hello")' });
+    expect(step.codeChunk).toEqual({
+      language: "python",
+      targetFile: "app/main.py",
+      code: 'print("hello")',
+      newFile: true,
+      newFolder: "app",
+    });
   });
 
   it("reserves the optional Provider tag and Checks on a Step", async () => {
@@ -96,6 +102,13 @@ describe("loadTrack", () => {
     ]);
     expect(result.errors[0]!.message).toMatch(/Code Chunk/);
     expect(result.errors[1]!.message).toMatch(/file=/);
+  });
+
+  it("loads every Track shipped in the repo", async () => {
+    for (const rel of ["examples/todo-track", "tracks/build-an-agent"]) {
+      const result = await loadTrack(path.join(__dirname, "..", "..", rel));
+      if (!result.ok) throw new Error(`${rel}: ${JSON.stringify(result.errors)}`);
+    }
   });
 
   it("loads the sample Track shipped in examples", async () => {

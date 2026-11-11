@@ -170,6 +170,7 @@ export async function loadTrack(folder: string, options: LoadTrackOptions = {}):
   const checkFiles = await listCheckFiles(folder);
   const lessons: Lesson[] = [];
   const seen = new Set<string>();
+  const seenFiles = new Set<string>();
   for (const rel of trackFile.value.lessonFiles) {
     const key = path.posix.normalize(rel);
     if (seen.has(key)) continue; // already reported by checkLessonFileList
@@ -184,7 +185,7 @@ export async function loadTrack(folder: string, options: LoadTrackOptions = {}):
       continue;
     }
     const id = path.basename(rel, path.extname(rel));
-    const lesson = parseLessonFile(rel, id, text, { checkFiles, habits: trackFile.value.habits });
+    const lesson = parseLessonFile(rel, id, text, { checkFiles, habits: trackFile.value.habits, seenFiles });
     if (lesson.value) lessons.push(lesson.value);
     else errors.push(...lesson.errors);
   }

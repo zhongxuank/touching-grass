@@ -110,6 +110,7 @@ def tool_results_message(tool_uses: list) -> dict:
 provider: claude
 checks: test_agent_claude.py
 habit: Small functions
+place: Replace the whole file. The three functions stay as they were; the imports, `SYSTEM` and `run_agent` are new
 
 Now the loop. Each round it sends the whole conversation plus the tool schemas. The response has a **stop reason** that says why the model stopped. `"tool_use"` means "I want a tool run". Anything else (usually `"end_turn"`) means it finished, so we return its text. When it wants a tool, we append two messages: the assistant's reply exactly as received, then the tool-result message, and go round again. Appending `response.content` (the whole list of blocks, not just the text) is important: it carries the model's thinking blocks and its `tool_use` blocks back to it, so the model sees its own earlier reasoning and the request your tool result answers. Without it the model would not remember asking.
 

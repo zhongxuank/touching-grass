@@ -70,9 +70,12 @@ A `## Step: <title>` section. In order:
 1. Optional metadata lines, directly after the heading:
    - `provider: <name>` marks the Step as specific to a Provider: `claude`, `openai` or `openrouter`. Any other name is a validation error naming the file and line. Exposed as `Step.provider`; see Providers below.
    - `checks: <file>, <file>` lists the Check files the Step needs, by name, relative to the Track's `checks/` folder. Exposed as `Step.checks` and run by Run Checks (see Checks below). A Step with no `checks:` line has no Checks; the Learner marks it done by hand. A name that is not a file in `checks/` is a validation error.
+   - `place: <text>` says where the code goes in a file an earlier Step created, for example `place: Replace the whole file. The imports are new`. Required for such a Step, or the Track fails validation. Inline Markdown is allowed. Exposed as `CodeChunk.place`.
    - `habit: <name>` names the Track Habit the Step's Code Chunk models. The name must match one of the Track's `habits` exactly, or the Track fails validation. Shown as a callout between the explanation and the Code Chunk.
 2. The explanation (Markdown, required). Shown first.
-3. Exactly one fenced Code Chunk whose info string is `<language> file=<path>`, where `<path>` is the target file in the Learner's agent project. Shown second, with the target file named. The Code Chunk must have code in it: an empty fence is a validation error.
+3. Exactly one fenced Code Chunk whose info string is `<language> file=<path>`, where `<path>` is the target file in the Learner's agent project. The Code Chunk must have code in it: an empty fence is a validation error.
+
+The Step panel shows the Code Chunk as a callout headed **New file** or **Edit file** and the path. A file is new when no earlier Step in the Track, in Track order, writes to it (`CodeChunk.newFile`). When its folder is new too, the callout says to create the folder (`CodeChunk.newFolder`). An edit shows its `place:` text.
 
 Nothing may follow the Code Chunk within a Step. Step ids are `<lesson file name>/<position>`, for example `01-call-an-llm/2`.
 

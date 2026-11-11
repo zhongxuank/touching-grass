@@ -15,6 +15,7 @@ print("hello, world")
 
 checks: test_greet.py
 habit: Small functions
+place: Replace the whole file
 
 Small functions are easier to test and reuse, so the greeting now lives in its own function.
 

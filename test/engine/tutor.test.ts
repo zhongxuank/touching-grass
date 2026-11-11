@@ -20,7 +20,7 @@ const step: Step = {
   id: "01-call-an-llm/5",
   title: "Call Claude",
   explanation: "Send one message and print the reply.",
-  codeChunk: { language: "python", targetFile: "app/claude.py", code: "print('hi')\n" },
+  codeChunk: { language: "python", targetFile: "app/claude.py", code: "print('hi')\n", newFile: true },
   provider: "claude",
   checks: ["test_claude.py"],
   habit: "Type hints",
@@ -42,7 +42,7 @@ describe("renderCurrentStep", () => {
   it("lists the Step's details, explanation and Code Chunk", () => {
     const text = renderCurrentStep(step);
     expect(text).toContain("# Current Step: Call Claude");
-    expect(text).toContain("`app/claude.py`");
+    expect(text).toContain("New file: `app/claude.py`");
     expect(text).toContain("Provider: claude");
     expect(text).toContain("Habit: Type hints");
     expect(text).toContain("```python\nprint('hi')\n```");
