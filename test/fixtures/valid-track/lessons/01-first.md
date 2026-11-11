@@ -15,6 +15,7 @@ print("hello")
 
 provider: claude
 checks: test_key.py
+habit: Keep secrets in .env
 
 Keep secrets in `.env`, never in code.
 

@@ -17,6 +17,8 @@ export interface Step {
   provider?: string;
   /** Check files this Step needs, named relative to the Track's `checks/` folder. */
   checks: string[];
+  /** A Habit of the Track this Step's Code Chunk models. Shown as a callout. */
+  habit?: string;
 }
 
 export interface Lesson {

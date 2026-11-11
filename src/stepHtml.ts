@@ -1,5 +1,5 @@
 import MarkdownIt from "markdown-it";
-import type { Step } from "./engine";
+import type { Lesson, Step, Track } from "./engine";
 
 const md = new MarkdownIt({ html: false, linkify: false });
 
@@ -7,14 +7,37 @@ const escape = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 /**
- * Body of the Step panel: explanation first, then the Code Chunk, then its target file.
- * Pure string in, string out, so the shell stays free of domain logic.
+ * Body of the Step panel: explanation first, then the Habit callout (if any), then the Code Chunk,
+ * then its target file. Pure string in, string out, so the shell stays free of domain logic.
  */
 export function renderStepHtml(step: Step): string {
+  const callout = step.habit
+    ? `\n<aside class="habit-callout">Habit: <strong>${escape(step.habit)}</strong></aside>`
+    : "";
   return `<h1>${escape(step.title)}</h1>
-<section class="explanation">${md.render(step.explanation)}</section>
+<section class="explanation">${md.render(step.explanation)}</section>${callout}
 <section class="code-chunk"><pre><code>${escape(step.codeChunk.code)}</code></pre></section>
 <section class="target-file">Type this into <code>${escape(step.codeChunk.targetFile)}</code> in your agent project.</section>`;
+}
+
+/** Body of the Reflection panel for a Lesson: ungraded, optional questions, rendered as Markdown. */
+export function renderReflectionHtml(lesson: Lesson): string {
+  const questions = lesson.reflection.map((q) => `- ${q}`).join("\n");
+  return `<h1>Reflection: ${escape(lesson.title)}</h1>
+<p class="reflection-note">Ungraded and optional. Answer in your own words; nothing here is checked or saved.</p>
+<section class="reflection">${md.render(questions)}</section>`;
+}
+
+/** Body of the Track overview panel: the Track title and the Habits it models. */
+export function renderTrackHtml(track: Track): string {
+  const habits =
+    track.habits.length === 0
+      ? `<p>This Track names no Habits.</p>`
+      : `<ul class="habits">${track.habits.map((h) => `<li>${escape(h)}</li>`).join("")}</ul>`;
+  return `<h1>${escape(track.title)}</h1>
+<h2>Habits</h2>
+<p>Good engineering practices this Track models and calls out in its Steps.</p>
+${habits}`;
 }
 
 /** What the Step panel shows beyond the Step itself. Plain data so the shell holds no domain logic. */
@@ -55,8 +78,8 @@ export function renderPanelControls(step: Step, state: PanelState): string {
   return parts.join("\n");
 }
 
-/** Full webview document with a strict CSP: only the one nonce'd script runs. */
-export function renderPanelDocument(step: Step, state: PanelState, nonce: string, cspSource: string): string {
+/** Full webview document with a strict CSP: only the one nonce'd script runs. Shared by every panel. */
+export function renderDocument(body: string, nonce: string, cspSource: string): string {
   const csp = `default-src 'none'; style-src ${cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';`;
   return `<!doctype html><html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="${csp}">
@@ -68,8 +91,9 @@ export function renderPanelDocument(step: Step, state: PanelState, nonce: string
   .fail { color: var(--vscode-testing-iconFailed, red); }
   button.link { background: none; border: none; color: var(--vscode-textLink-foreground); cursor: pointer; padding: 0; }
   .output { white-space: pre-wrap; }
-</style></head><body>${renderStepHtml(step)}
-${renderPanelControls(step, state)}
+  .habit-callout { border-left: 3px solid var(--vscode-textLink-foreground); padding: 0.25rem 0.75rem; margin: 1rem 0; }
+  .reflection-note { opacity: 0.8; font-style: italic; }
+</style></head><body>${body}
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
   document.addEventListener("click", (e) => {
@@ -77,4 +101,19 @@ ${renderPanelControls(step, state)}
     if (el) vscode.postMessage({ action: el.dataset.action, check: el.dataset.check });
   });
 </script></body></html>`;
+}
+
+/** The Step panel document: the Step, then its controls and results. */
+export function renderPanelDocument(step: Step, state: PanelState, nonce: string, cspSource: string): string {
+  return renderDocument(`${renderStepHtml(step)}\n${renderPanelControls(step, state)}`, nonce, cspSource);
+}
+
+/** The Reflection panel document: no Step controls. */
+export function renderReflectionDocument(lesson: Lesson, nonce: string, cspSource: string): string {
+  return renderDocument(renderReflectionHtml(lesson), nonce, cspSource);
+}
+
+/** The Track overview panel document: no Step controls. */
+export function renderTrackDocument(track: Track, nonce: string, cspSource: string): string {
+  return renderDocument(renderTrackHtml(track), nonce, cspSource);
 }
