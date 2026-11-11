@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { formatValidationError, loadTrack, type Step, type TrackSession } from "./engine";
+import { registerPasteNudge } from "./pasteNudge";
 import { renderStepHtml } from "./stepHtml";
 import { TrackTree } from "./trackTree";
 
@@ -7,8 +8,10 @@ export function activate(context: vscode.ExtensionContext): void {
   const tree = new TrackTree();
   let session: TrackSession | undefined;
   let panel: vscode.WebviewPanel | undefined;
+  let currentStep: Step | undefined;
 
   const showStep = (step: Step) => {
+    currentStep = step;
     if (!panel) {
       panel = vscode.window.createWebviewPanel("touchingGrass.step", step.title, vscode.ViewColumn.Beside, {});
       panel.onDidDispose(() => (panel = undefined), null, context.subscriptions);
@@ -24,6 +27,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     vscode.window.registerTreeDataProvider("touchingGrass.track", tree),
+    registerPasteNudge(() => currentStep),
     vscode.commands.registerCommand("touchingGrass.openTrack", async (folder?: vscode.Uri) => {
       const uri =
         folder ??
@@ -42,6 +46,7 @@ export function activate(context: vscode.ExtensionContext): void {
         return undefined;
       }
       session = result.session;
+      currentStep = undefined;
       tree.setTrack(session.track);
       await vscode.commands.executeCommand("touchingGrass.track.focus");
       return { title: session.track.title, lessons: session.track.lessons.length };
