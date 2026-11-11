@@ -8,6 +8,11 @@ export interface ParseLessonOptions {
   checkFiles?: ReadonlySet<string>;
   /** The Track's Habits, which a Step's `habit:` line must name. Omit to skip the check. */
   habits?: readonly string[];
+  /**
+   * Target files written by earlier Steps, in Track order. Parsing adds this Lesson's files to it, so pass the
+   * same set to each Lesson in turn. Decides whether a Code Chunk creates a new file. Defaults to an empty set.
+   */
+  seenFiles?: Set<string>;
 }
 
 export interface TrackFile {
@@ -131,7 +136,7 @@ const STEP_HEADING = /^##\s+Step:\s*(.*?)\s*$/;
 const REFLECTION_HEADING = /^##\s+Reflection\s*$/;
 const ANY_H2 = /^##\s/;
 const FENCE_OPEN = /^```(\S*)\s*(.*?)\s*$/;
-const META_LINE = /^(provider|checks|habit):\s*(.*?)\s*$/;
+const META_LINE = /^(provider|checks|habit|place):\s*(.*?)\s*$/;
 
 interface Section {
   heading: string;
@@ -165,6 +170,7 @@ function parseStep(
   section: Section,
   title: string,
   options: ParseLessonOptions,
+  seenFiles: Set<string>,
 ): Parsed<Step> {
   const lines = section.lines;
   const fenceAt = lines.findIndex((l) => l.startsWith("```"));
@@ -188,6 +194,7 @@ function parseStep(
   let provider: string | undefined;
   let checks: string[] = [];
   let habit: string | undefined;
+  let place: string | undefined;
   let i = 0;
   while (i < before.length && (before[i]!.trim() === "" || META_LINE.test(before[i]!))) {
     const m = META_LINE.exec(before[i]!);
@@ -212,6 +219,8 @@ function parseStep(
           );
         }
         habit = m[2]!;
+      } else if (m[1] === "place") {
+        if (m[2]) place = m[2];
       } else checks = m[2]!.split(",").map((c) => c.trim()).filter(Boolean);
     }
     i++;
@@ -241,11 +250,22 @@ function parseStep(
     }
   }
 
-  const codeChunk: CodeChunk = {
-    language: open[1]!,
-    targetFile: fileAttr[1]!,
-    code,
-  };
+  const targetFile = path.posix.normalize(fileAttr[1]!);
+  const newFile = !seenFiles.has(targetFile);
+  if (!newFile && !place) {
+    return fail(
+      file,
+      `Step "${title}": an earlier Step already creates ${targetFile}, so say where this code goes with a \`place:\` line, like \`place: Replace the whole file\` or \`place: Add below ask()\`.`,
+      fenceLine,
+    );
+  }
+  const folder = path.posix.dirname(targetFile);
+  const folderIsNew = folder !== "." && ![...seenFiles].some((f) => f.startsWith(`${folder}/`));
+  seenFiles.add(targetFile);
+
+  const codeChunk: CodeChunk = { language: open[1]!, targetFile: fileAttr[1]!, code, newFile };
+  if (folderIsNew) codeChunk.newFolder = folder;
+  if (place) codeChunk.place = place;
   const step: Step = { id: `${lessonId}/${position}`, title, explanation, codeChunk, checks };
   if (provider) step.provider = provider;
   if (habit) step.habit = habit;
@@ -267,6 +287,7 @@ export function parseLessonFile(
   const { intro, sections } = splitSections(fm.body, fm.bodyStart);
   const errors: ValidationError[] = [];
   const steps: Step[] = [];
+  const seenFiles = options.seenFiles ?? new Set<string>();
   let reflection: string[] = [];
   for (const section of sections) {
     const stepHeading = STEP_HEADING.exec(section.heading);
@@ -276,7 +297,7 @@ export function parseLessonFile(
         errors.push({ file, line: section.line, message: "A Step heading needs a title: `## Step: <title>`." });
         continue;
       }
-      const result = parseStep(file, lessonId, steps.length + 1, section, stepTitle, options);
+      const result = parseStep(file, lessonId, steps.length + 1, section, stepTitle, options, seenFiles);
       if (result.value) steps.push(result.value);
       else errors.push(...result.errors);
     } else if (REFLECTION_HEADING.test(section.heading)) {

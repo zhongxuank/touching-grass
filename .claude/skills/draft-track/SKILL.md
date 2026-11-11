@@ -17,6 +17,7 @@ Plan before writing a file, and show the Learner the outline (Lessons, Step titl
 
 - A Lesson is one concept. A Step is one small Code Chunk the Learner types in a few minutes.
 - The Steps build one growing project in the Learner's workspace. The first Lesson starts with the setup Steps; every later Step extends files that exist.
+- A Step that writes to a file an earlier Step created needs a `place:` line saying where the code goes. Its Code Chunk is the whole new file (the reference solution relies on this), so write `place: Replace the whole file.` and name what stays and what is new, for example `place: Replace the whole file. `add_task` stays as it was, `complete_task` is new`. The validator fails an edit Step with no `place:`.
 - Pick 3 to 5 Habits for the Track. Tag a Step with `habit:` where its Code Chunk models one (the name matches `habits` exactly).
 - Every Lesson ends with a Reflection of 1 or 2 "why" questions.
 

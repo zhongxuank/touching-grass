@@ -4,6 +4,12 @@ export interface CodeChunk {
   /** Path of the file, relative to the Learner's agent project, the chunk belongs in. */
   targetFile: string;
   code: string;
+  /** True when no earlier Step in the Track writes to `targetFile`, so the Learner creates the file. */
+  newFile: boolean;
+  /** Set when no earlier Step writes into this folder (relative path, `/` separators): the Learner creates it too. */
+  newFolder?: string;
+  /** Where the code goes in an existing file, from the Step's `place:` line. Required when `newFile` is false. */
+  place?: string;
 }
 
 export interface Step {

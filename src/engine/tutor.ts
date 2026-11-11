@@ -58,7 +58,9 @@ and typing every Code Chunk by hand, so that they learn it. You are their tutor,
 export function renderCurrentStep(step: Step, results?: CheckResult[]): string {
   const meta = [
     `- Step id: \`${step.id}\``,
-    `- Type into: \`${step.codeChunk.targetFile}\``,
+    `- ${step.codeChunk.newFile ? "New file" : "Edit file"}: \`${step.codeChunk.targetFile}\``,
+    step.codeChunk.newFolder ? `- Creates the folder: \`${step.codeChunk.newFolder}/\`` : undefined,
+    step.codeChunk.place ? `- Where: ${step.codeChunk.place}` : undefined,
     step.provider ? `- Provider: ${step.provider}` : undefined,
     step.habit ? `- Habit: ${step.habit}` : undefined,
     step.checks.length ? `- Checks: ${step.checks.map((c) => `\`${c}\``).join(", ")}` : "- Checks: none",

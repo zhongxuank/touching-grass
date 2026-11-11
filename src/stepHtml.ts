@@ -1,5 +1,5 @@
 import MarkdownIt from "markdown-it";
-import type { Lesson, Step, Track } from "./engine";
+import type { CodeChunk, Lesson, Step, Track } from "./engine";
 
 const md = new MarkdownIt({ html: false, linkify: false });
 
@@ -16,8 +16,24 @@ export function renderStepHtml(step: Step): string {
     : "";
   return `<h1>${escape(step.title)}</h1>
 <section class="explanation">${md.render(step.explanation)}</section>${callout}
-<section class="code-chunk"><pre><code>${escape(step.codeChunk.code)}</code></pre></section>
-<section class="target-file">Type this into <code>${escape(step.codeChunk.targetFile)}</code> in your agent project.</section>`;
+${renderCodeChunk(step.codeChunk)}`;
+}
+
+/**
+ * The Code Chunk as a callout: a header saying whether the Learner creates the file or edits one an earlier
+ * Step created, then where the code goes, then the code.
+ */
+export function renderCodeChunk(chunk: CodeChunk): string {
+  const kind = chunk.newFile ? "New file" : "Edit file";
+  const notes: string[] = [];
+  if (chunk.place) notes.push(md.renderInline(chunk.place));
+  else if (chunk.newFolder) notes.push(`Create the <code>${escape(chunk.newFolder)}/</code> folder, then this file in it.`);
+  else if (chunk.newFile) notes.push("Create this file and type the code below into it.");
+  return `<section class="chunk ${chunk.newFile ? "chunk-new" : "chunk-edit"}">
+<header class="chunk-head"><span class="chunk-kind">${kind}</span> <code class="chunk-path">${escape(chunk.targetFile)}</code></header>
+${notes.map((n) => `<p class="chunk-where">${n}</p>`).join("\n")}
+<pre><code>${escape(chunk.code)}</code></pre>
+</section>`;
 }
 
 /** Body of the Reflection panel for a Lesson: ungraded, optional questions, rendered as Markdown. */
@@ -102,7 +118,13 @@ export function renderDocument(body: string, nonce: string, cspSource: string): 
 <style>
   body { font-family: var(--vscode-font-family); padding: 1rem 1.5rem; line-height: 1.5; }
   pre { padding: 0.75rem; overflow-x: auto; background: var(--vscode-textCodeBlock-background); }
-  .target-file { opacity: 0.8; }
+  .chunk { border: 1px solid var(--vscode-panel-border, #8884); border-left: 4px solid var(--chunk-accent); border-radius: 4px; margin: 1rem 0; overflow: hidden; }
+  .chunk-new { --chunk-accent: var(--vscode-testing-iconPassed, #3a3); }
+  .chunk-edit { --chunk-accent: var(--vscode-editorWarning-foreground, #c90); }
+  .chunk-head { padding: 0.4rem 0.75rem; background: color-mix(in srgb, var(--chunk-accent) 14%, transparent); font-weight: 600; }
+  .chunk-kind { color: var(--chunk-accent); margin-right: 0.35rem; }
+  .chunk-where { margin: 0.5rem 0.75rem 0; }
+  .chunk pre { margin: 0.5rem 0 0; border-radius: 0; }
   .pass { color: var(--vscode-testing-iconPassed, green); }
   .fail { color: var(--vscode-testing-iconFailed, red); }
   button.link { background: none; border: none; color: var(--vscode-textLink-foreground); cursor: pointer; padding: 0; }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import * as path from "node:path";
 import { formatValidationError, loadTrack } from "../../src/engine";
+import { parseLessonFile } from "../../src/engine/parse";
 
 const fixture = (name: string) => path.join(__dirname, "..", "fixtures", name);
 
@@ -53,5 +54,37 @@ describe("loadTrack validation", () => {
     const result = await loadTrack(fixture("duplicate-lesson"));
     if (result.ok) throw new Error("expected errors");
     expect(formatValidationError(result.errors[0]!)).toMatch(/^track\.md:5: /);
+  });
+});
+
+describe("new and edited files", () => {
+  const lesson = (steps: string) => `---\ntitle: L\n---\n${steps}`;
+  const stepMd = (title: string, file: string, meta = "") =>
+    `\n## Step: ${title}\n\n${meta}${meta ? "\n\n" : ""}Explain.\n\n\`\`\`python file=${file}\nx = 1\n\`\`\`\n`;
+
+  it("marks the first Step for a file as new, with its folder when that is new too", () => {
+    const seenFiles = new Set<string>();
+    const first = parseLessonFile("a.md", "a", lesson(stepMd("One", "app/a.py") + stepMd("Two", "app/b.py")), { seenFiles });
+    const [one, two] = first.value!.steps;
+    expect(one!.codeChunk).toMatchObject({ newFile: true, newFolder: "app" });
+    expect(two!.codeChunk.newFile).toBe(true);
+    expect(two!.codeChunk.newFolder).toBeUndefined();
+  });
+
+  it("carries files across Lessons, and reads an edit's place line", () => {
+    const seenFiles = new Set<string>();
+    parseLessonFile("a.md", "a", lesson(stepMd("One", "app/a.py")), { seenFiles });
+    const second = parseLessonFile("b.md", "b", lesson(stepMd("Two", "./app/a.py", "place: Replace the whole file")), {
+      seenFiles,
+    });
+    expect(second.value!.steps[0]!.codeChunk).toMatchObject({ newFile: false, place: "Replace the whole file" });
+  });
+
+  it("reports an edit with no place line, on the fence", () => {
+    const text = lesson(stepMd("One", "app/a.py") + stepMd("Two", "app/a.py"));
+    const result = parseLessonFile("a.md", "a", text);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]!.message).toMatch(/already creates app\/a\.py.*place:/);
+    expect(text.split("\n")[result.errors[0]!.line! - 1]).toMatch(/^```python file=app\/a\.py/);
   });
 });

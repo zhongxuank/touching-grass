@@ -7,6 +7,7 @@ import {
   renderStepHtml,
   renderTrackDocument,
   renderTrackHtml,
+  renderCodeChunk,
 } from "../../src/stepHtml";
 import type { Lesson, Step, Track } from "../../src/engine";
 
@@ -14,9 +15,32 @@ const step: Step = {
   id: "l/1",
   title: "Say <hello>",
   explanation: "Explain **why**.",
-  codeChunk: { language: "python", targetFile: "app/main.py", code: 'print("<hi>")' },
+  codeChunk: { language: "python", targetFile: "app/main.py", code: 'print("<hi>")', newFile: true },
   checks: [],
 };
+
+describe("renderCodeChunk", () => {
+  const chunk = step.codeChunk;
+
+  it("marks a new file, and the folder to create when it is new too", () => {
+    const html = renderCodeChunk({ ...chunk, newFolder: "app" });
+    expect(html).toContain('class="chunk chunk-new"');
+    expect(html).toContain(">New file<");
+    expect(html).toContain("Create the <code>app/</code> folder, then this file in it.");
+  });
+
+  it("marks an edit and says where the code goes, rendering inline Markdown", () => {
+    const html = renderCodeChunk({ ...chunk, newFile: false, place: "Add below `greet()`" });
+    expect(html).toContain('class="chunk chunk-edit"');
+    expect(html).toContain(">Edit file<");
+    expect(html).toContain("Add below <code>greet()</code>");
+    expect(html).not.toContain("folder");
+  });
+
+  it("escapes the path", () => {
+    expect(renderCodeChunk({ ...chunk, targetFile: "a/<b>.py" })).toContain("a/&lt;b&gt;.py");
+  });
+});
 
 describe("renderStepHtml habit callout", () => {
   it("shows the Habit as a callout between the explanation and the Code Chunk", () => {
@@ -77,12 +101,12 @@ describe("renderTrackHtml", () => {
 });
 
 describe("renderStepHtml", () => {
-  it("shows the explanation, then the Code Chunk, then the target file", () => {
+  it("shows the explanation, then the Code Chunk under a header naming its file", () => {
     const html = renderStepHtml(step);
     const at = (s: string) => html.indexOf(s);
     expect(at("<strong>why</strong>")).toBeGreaterThan(-1);
-    expect(at("<strong>why</strong>")).toBeLessThan(at("print("));
-    expect(at("print(")).toBeLessThan(at("app/main.py"));
+    expect(at("<strong>why</strong>")).toBeLessThan(at("app/main.py"));
+    expect(at("app/main.py")).toBeLessThan(at("print("));
   });
 
   it("escapes the Code Chunk and title", () => {

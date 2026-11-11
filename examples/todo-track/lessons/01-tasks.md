@@ -48,6 +48,7 @@ def add_task(tasks: list[dict], title: str) -> dict:
 
 checks: test_complete.py
 habit: Small functions
+place: Replace the whole file. `add_task` stays as it was, `complete_task` is new
 
 `complete_task` looks a task up by id and marks it done. It raises `KeyError` for an unknown id instead of silently doing nothing, so a typo surfaces as an error the CLI can report later. This replaces `todo/tasks.py` with the file below: keep `add_task` exactly as it was and add the new function after it.
 
