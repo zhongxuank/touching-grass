@@ -9,10 +9,24 @@ import {
   type TrackSession,
 } from "./engine";
 import { randomBytes } from "node:crypto";
+import { promises as fs } from "node:fs";
+import * as path from "node:path";
 import { showValidationErrors } from "./diagnostics";
 import { registerPasteNudge } from "./pasteNudge";
 import { renderPanelDocument, renderReflectionDocument, renderTrackDocument, type PanelState } from "./stepHtml";
 import { TrackTree } from "./trackTree";
+
+/** globalState key: agent workspace path -> the Track folder last used in it. */
+const TRACK_BY_WORKSPACE = "touchingGrass.trackByWorkspace";
+
+const exists = (p: string) =>
+  fs.stat(p).then(
+    () => true,
+    () => false,
+  );
+
+/** The folder open in this window, if any. */
+const windowFolder = () => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 
 export function activate(context: vscode.ExtensionContext): void {
   const tree = new TrackTree();
@@ -61,6 +75,10 @@ export function activate(context: vscode.ExtensionContext): void {
   const attachWorkspace = async (folder: string) => {
     if (!session) return;
     workspace = folder;
+    if (trackFolder) {
+      const map = context.globalState.get<Record<string, string>>(TRACK_BY_WORKSPACE, {});
+      await context.globalState.update(TRACK_BY_WORKSPACE, { ...map, [folder]: trackFolder });
+    }
     const { notice } = await session.openWorkspace(folder);
     if (notice) void vscode.window.showWarningMessage(notice);
     if (trackFolder) {
@@ -73,6 +91,21 @@ export function activate(context: vscode.ExtensionContext): void {
   };
 
   const pickWorkspace = async (): Promise<string | undefined> => {
+    const here = windowFolder();
+    if (here && here !== trackFolder) {
+      const choice = await vscode.window.showQuickPick(
+        [
+          { label: "Use this window's folder", description: here, folder: here },
+          { label: "Choose another folder...", folder: undefined },
+        ],
+        { title: "Where will you write your code?" },
+      );
+      if (!choice) return undefined;
+      if (choice.folder) {
+        await attachWorkspace(choice.folder);
+        return choice.folder;
+      }
+    }
     const picked = (
       await vscode.window.showOpenDialog({
         canSelectFolders: true,
@@ -203,6 +236,81 @@ export function activate(context: vscode.ExtensionContext): void {
     showDocument(title, document);
   };
 
+  /** Track folders shipped inside the extension, under `tracks/`. */
+  const builtInTracks = async (): Promise<string[]> => {
+    const root = path.join(context.extensionPath, "tracks");
+    const names = await fs.readdir(root).catch(() => [] as string[]);
+    const folders = names.map((n) => path.join(root, n));
+    const ok = await Promise.all(folders.map((f) => exists(path.join(f, "track.md"))));
+    return folders.filter((_, i) => ok[i]);
+  };
+
+  /** Pick a built-in Track, or browse for a Track folder. */
+  const pickTrack = async (): Promise<string | undefined> => {
+    const builtIn = await builtInTracks();
+    if (builtIn.length) {
+      const choice = await vscode.window.showQuickPick(
+        [
+          ...builtIn.map((f) => ({ label: path.basename(f), description: "built in", folder: f as string | undefined })),
+          { label: "Browse for a Track folder...", description: "", folder: undefined },
+        ],
+        { title: "Open Track" },
+      );
+      if (!choice) return undefined;
+      if (choice.folder) return choice.folder;
+    }
+    return (
+      await vscode.window.showOpenDialog({
+        canSelectFolders: true,
+        canSelectFiles: false,
+        canSelectMany: false,
+        openLabel: "Open Track",
+      })
+    )?.[0]?.fsPath;
+  };
+
+  /**
+   * Load a Track and show it. The agent workspace is, in order: the one already chosen, this window's folder
+   * if it was last used with this Track, or none yet (Run Checks asks). `quiet` skips error popups (startup).
+   */
+  const openTrackAt = async (folder: string, quiet = false) => {
+    const result = await loadTrack(folder);
+    if (!result.ok) {
+      if (!quiet) {
+        void vscode.window.showErrorMessage(
+          `Cannot open Track:\n${result.errors.map(formatValidationError).join("\n")}`,
+        );
+      }
+      return undefined;
+    }
+    const opened = result.session;
+    session = opened;
+    trackFolder = folder;
+    current = undefined;
+    tree.setTrack(
+      opened.track,
+      (id) => opened.isDone(id),
+      (id) => opened.isVisible(id),
+    );
+    const here = windowFolder();
+    const map = context.globalState.get<Record<string, string>>(TRACK_BY_WORKSPACE, {});
+    const target = workspace ?? (here && map[here] === folder ? here : undefined);
+    if (target) {
+      await attachWorkspace(target);
+      resume();
+    }
+    await vscode.commands.executeCommand("touchingGrass.track.focus");
+    return { title: opened.track.title, lessons: opened.track.lessons.length };
+  };
+
+  /** On startup in a folder used as an agent workspace before, reopen its Track where the Learner left off. */
+  const restore = async () => {
+    const here = windowFolder();
+    if (!here || session) return;
+    const last = context.globalState.get<Record<string, string>>(TRACK_BY_WORKSPACE, {})[here];
+    if (last && (await exists(path.join(last, "track.md")))) await openTrackAt(last, true);
+  };
+
   context.subscriptions.push(
     vscode.window.onDidCloseTerminal((t) => {
       if (t === tutorTerminal) tutorTerminal = undefined;
@@ -210,37 +318,8 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.registerTreeDataProvider("touchingGrass.track", tree),
     registerPasteNudge(() => current),
     vscode.commands.registerCommand("touchingGrass.openTrack", async (folder?: vscode.Uri) => {
-      const uri =
-        folder ??
-        (await vscode.window.showOpenDialog({
-          canSelectFolders: true,
-          canSelectFiles: false,
-          canSelectMany: false,
-          openLabel: "Open Track",
-        }))?.[0];
-      if (!uri) return undefined;
-      const result = await loadTrack(uri.fsPath);
-      if (!result.ok) {
-        void vscode.window.showErrorMessage(
-          `Cannot open Track:\n${result.errors.map(formatValidationError).join("\n")}`,
-        );
-        return undefined;
-      }
-      const opened = result.session;
-      session = opened;
-      trackFolder = uri.fsPath;
-      current = undefined;
-      tree.setTrack(
-        opened.track,
-        (id) => opened.isDone(id),
-        (id) => opened.isVisible(id),
-      );
-      if (workspace) {
-        await attachWorkspace(workspace);
-        resume();
-      }
-      await vscode.commands.executeCommand("touchingGrass.track.focus");
-      return { title: opened.track.title, lessons: opened.track.lessons.length };
+      const picked = folder?.fsPath ?? (await pickTrack());
+      return picked ? openTrackAt(picked) : undefined;
     }),
     vscode.commands.registerCommand("touchingGrass.chooseWorkspace", async () => {
       if (!session) {
@@ -291,6 +370,7 @@ export function activate(context: vscode.ExtensionContext): void {
       return { ok: false, errors: result.errors.map(formatValidationError) };
     }),
   );
+  void restore();
 }
 
 export function deactivate(): void {}
