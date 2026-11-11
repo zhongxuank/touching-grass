@@ -25,6 +25,8 @@ export interface PanelState {
   results?: { check: string; passed: boolean; output: string }[];
   /** A notice such as "uv was not found" or "choose a workspace". */
   message?: string;
+  /** An earlier done Step, opened to re-read: no Run Checks or Mark done. Next Step still works. */
+  readOnly?: boolean;
 }
 
 /** Controls and results below the Step: Run Checks (or Mark done), results, Next Step. */
@@ -40,10 +42,9 @@ export function renderPanelControls(step: Step, state: PanelState): string {
             r && !r.passed ? `<pre class="output">${escape(r.output)}</pre>` : ""
           }</li>`;
         })
-        .join("")}</ul>
-<button data-action="runChecks">Run Checks</button></section>`,
+        .join("")}</ul>${state.readOnly ? "" : '\n<button data-action="runChecks">Run Checks</button>'}</section>`,
     );
-  } else if (!state.done) {
+  } else if (!state.done && !state.readOnly) {
     parts.push(`<section class="checks"><p>This Step has no Checks.</p><button data-action="markDone">Mark done</button></section>`);
   }
   if (state.message) parts.push(`<p class="notice">${escape(state.message)}</p>`);

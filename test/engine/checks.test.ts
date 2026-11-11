@@ -143,6 +143,7 @@ describe("progress", () => {
     session.markDone(NO_CHECKS);
     expect(JSON.parse(JSON.stringify(session.getProgress()))).toEqual({
       doneSteps: [NO_CHECKS, "02-second/1"],
+      currentStep: NO_CHECKS,
     });
   });
 });

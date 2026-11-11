@@ -8,9 +8,17 @@ export class TrackTree implements vscode.TreeDataProvider<Node> {
   private readonly changed = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this.changed.event;
   private track: Track | undefined;
+  private isDone: (stepId: string) => boolean = () => false;
 
-  setTrack(track: Track | undefined): void {
+  /** `isDone` tells the tree which Steps to show with a check icon. */
+  setTrack(track: Track | undefined, isDone: (stepId: string) => boolean = () => false): void {
     this.track = track;
+    this.isDone = isDone;
+    this.changed.fire();
+  }
+
+  /** Redraw after progress changes. */
+  refresh(): void {
     this.changed.fire();
   }
 
@@ -28,6 +36,7 @@ export class TrackTree implements vscode.TreeDataProvider<Node> {
     }
     const item = new vscode.TreeItem(node.step.title, vscode.TreeItemCollapsibleState.None);
     item.contextValue = "step";
+    if (this.isDone(node.step.id)) item.iconPath = new vscode.ThemeIcon("check");
     item.command = { command: "touchingGrass.openStep", title: "Open Step", arguments: [node.step.id] };
     return item;
   }

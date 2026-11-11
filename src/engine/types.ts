@@ -79,4 +79,6 @@ export type RunChecksOutcome =
 export interface Progress {
   /** Ids of the Steps whose Checks have passed (or that were marked done). */
   doneSteps: string[];
+  /** The Step the Learner is on. */
+  currentStep?: string;
 }

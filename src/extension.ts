@@ -15,6 +15,8 @@ export function activate(context: vscode.ExtensionContext): void {
   let current: Step | undefined;
   let results: PanelState["results"];
   let message: string | undefined;
+  /** The Learner's agent workspace. Kept across Tracks, so a Track opened later resumes in it. */
+  let workspace: string | undefined;
 
   const render = () => {
     if (!panel || !session || !current) return;
@@ -23,12 +25,29 @@ export function activate(context: vscode.ExtensionContext): void {
       hasNext: session.advance(current.id) !== undefined,
       results,
       message,
+      readOnly: session.isDone(current.id) && session.getCurrentStep() !== current.id,
     };
     panel.title = current.title;
     panel.webview.html = renderPanelDocument(current, state, randomBytes(16).toString("hex"), panel.webview.cspSource);
   };
 
-  const chooseWorkspace = async (): Promise<string | undefined> => {
+  /** Wait for progress to reach the workspace, and say so if it could not be saved. */
+  const saveProgress = async () => {
+    const error = await session?.flush();
+    if (error) void vscode.window.showErrorMessage(error);
+  };
+
+  /** Use a folder as the agent workspace and load the progress saved in it. */
+  const attachWorkspace = async (folder: string) => {
+    if (!session) return;
+    workspace = folder;
+    const { notice } = await session.openWorkspace(folder);
+    if (notice) void vscode.window.showWarningMessage(notice);
+    tree.refresh();
+    await saveProgress();
+  };
+
+  const pickWorkspace = async (): Promise<string | undefined> => {
     const picked = (
       await vscode.window.showOpenDialog({
         canSelectFolders: true,
@@ -37,7 +56,7 @@ export function activate(context: vscode.ExtensionContext): void {
         openLabel: "Use as agent workspace",
       })
     )?.[0];
-    if (picked && session) session.setWorkspace(picked.fsPath);
+    if (picked) await attachWorkspace(picked.fsPath);
     return picked?.fsPath;
   };
 
@@ -45,20 +64,24 @@ export function activate(context: vscode.ExtensionContext): void {
     if (!session || !current) return;
     const step = current;
     if (msg.action === "runChecks") {
-      if (!session.getWorkspace() && !(await chooseWorkspace())) {
+      if (!session.getWorkspace() && !(await pickWorkspace())) {
         message = "Choose your agent workspace to run Checks.";
         return render();
       }
       const outcome = await session.runChecks(step.id);
       results = outcome.status === "ran" ? outcome.results : undefined;
       message = outcome.status === "tooling-missing" ? outcome.message : undefined;
+      tree.refresh();
+      await saveProgress();
       render();
     } else if (msg.action === "markDone") {
       session.markDone(step.id);
+      tree.refresh();
+      await saveProgress();
       render();
     } else if (msg.action === "next") {
       const next = session.advance(step.id);
-      if (next) showStep(next);
+      if (next) openStepById(next.id);
     } else if (msg.action === "openCheck" && msg.check && step.checks.includes(msg.check)) {
       await vscode.window.showTextDocument(vscode.Uri.file(session.checkFilePath(msg.check)), {
         viewColumn: vscode.ViewColumn.One,
@@ -81,6 +104,22 @@ export function activate(context: vscode.ExtensionContext): void {
     render();
   };
 
+  /** Open a Step in the panel. The engine moves the current Step only for an unfinished Step. */
+  const openStepById = (stepId: string): Step | undefined => {
+    const step = session?.openStep(stepId);
+    if (step) {
+      showStep(step);
+      void saveProgress();
+    }
+    return step;
+  };
+
+  /** Open the panel at the current Step, where the Learner left off. */
+  const resume = () => {
+    const id = session?.getCurrentStep();
+    if (id) openStepById(id);
+  };
+
   context.subscriptions.push(
     vscode.window.registerTreeDataProvider("touchingGrass.track", tree),
     registerPasteNudge(() => current),
@@ -101,24 +140,27 @@ export function activate(context: vscode.ExtensionContext): void {
         );
         return undefined;
       }
-      session = result.session;
+      const opened = result.session;
+      session = opened;
       current = undefined;
-      tree.setTrack(session.track);
+      tree.setTrack(opened.track, (id) => opened.isDone(id));
+      if (workspace) {
+        await attachWorkspace(workspace);
+        resume();
+      }
       await vscode.commands.executeCommand("touchingGrass.track.focus");
-      return { title: session.track.title, lessons: session.track.lessons.length };
+      return { title: opened.track.title, lessons: opened.track.lessons.length };
     }),
     vscode.commands.registerCommand("touchingGrass.chooseWorkspace", async () => {
       if (!session) {
         void vscode.window.showErrorMessage("Open a Track first.");
         return undefined;
       }
-      return chooseWorkspace();
+      const folder = await pickWorkspace();
+      if (folder) resume();
+      return folder;
     }),
-    vscode.commands.registerCommand("touchingGrass.openStep", (stepId: string) => {
-      const step = session?.getStep(stepId);
-      if (step) showStep(step);
-      return step?.title;
-    }),
+    vscode.commands.registerCommand("touchingGrass.openStep", (stepId: string) => openStepById(stepId)?.title),
     problems,
     vscode.commands.registerCommand("touchingGrass.validateTrack", async (folder?: vscode.Uri) => {
       const uri =
