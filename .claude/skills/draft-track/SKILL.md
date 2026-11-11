@@ -45,15 +45,16 @@ A Check confirms the Learner's typed code works. It is not a quiz.
 - Check behaviour and shape: return types, keys present, side effects on a `tmp_path`. Never exact text. Use `in`, `len`, `isinstance`, `!=` before and after.
 - Keep Learner files untouched: write only to `tmp_path`.
 - **Each Step's Checks pass against the code from all Steps so far.** A Check for Step 3 must not need Step 4's code and must still pass after Step 4 changes the file.
-- Checks that call a real LLM use the cheapest model (for example `claude-haiku-4-5`, `gpt-4o-mini`, or an OpenRouter equivalent), keep max tokens small, and assert structure (a non-empty string, the tool-call shape, valid JSON), never wording. Name the Provider's Step with `provider:` so the Check is skipped without a key.
+- Checks that call a real LLM use the cheapest model (for example `claude-haiku-5-5`, `gpt-4o-mini`, or an OpenRouter equivalent), keep max tokens small (but for a thinking model such as Claude Haiku 5.5, send `output_config={"effort": "low"}` and leave `max_tokens` around 1024, since thinking tokens count toward `max_tokens` and a tiny cap can cut the answer off), and assert structure (a non-empty string, the tool-call shape, valid JSON), never wording. Name the Provider's Step with `provider:` so the Check is skipped without a key.
 
 ## 4. Verify
 
 1. Keep a reference solution: the Learner workspace after the last Step, in `<track>/reference/`. Generate it from the Lessons so it cannot drift: `python3 -I .claude/skills/draft-track/extract-reference.py <track>` writes every Code Chunk to its `file=` path, later Steps overwriting earlier ones.
-2. Run each Check the way the player does, from the reference folder:
+2. Verify cumulatively, Step by Step: `python3 -I .claude/skills/draft-track/verify-steps.py <track> --all-providers`. For each Step in order it builds a fresh workspace from Code Chunks 1..N and runs that Step's Checks against it, with API keys removed from the environment (so key Checks must skip). With `--all-providers` it also replays the Track as a Learner with one key, leaving out Steps for the other Providers, which catches a file that imports another Provider's file. Every Check must pass or skip. Report the per-Step results to the Learner.
+3. Optionally run each Check against the final reference the way the player does, from the reference folder:
    `PYTHONPATH=$PWD uv run --with pytest pytest -q <track>/checks/<file> --rootdir $PWD`
    When a Check needs an API key you do not have, say so and skip it. Remove `uv.lock`, `.venv` and `__pycache__` from `reference/` afterwards.
-3. Run `npm run build` once, then `npm run validate-track -- <track>`. It prints `file:line: message` per problem. Fix every error and run it again. Done when it prints `OK`.
+4. Run `npm run build` once, then `npm run validate-track -- <track>`. It prints `file:line: message` per problem. Fix every error and run it again. Done when it prints `OK`.
 
 A Check that fails against the reference is a bug in the Check or in a Chunk: fix the file, then regenerate the reference.
 
