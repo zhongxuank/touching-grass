@@ -13,6 +13,8 @@ print("hello, world")
 
 ## Step: Wrap it in a function
 
+checks: test_greet.py
+
 Small functions are easier to test and reuse. This models the **Small functions** Habit.
 
 ```python file=hello/main.py

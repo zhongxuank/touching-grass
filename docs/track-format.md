@@ -69,11 +69,21 @@ A `## Step: <title>` section. In order:
 
 1. Optional reserved metadata lines, directly after the heading:
    - `provider: <name>` marks the Step as specific to a Provider. **Reserved:** parsed and exposed as `Step.provider`, not acted on yet.
-   - `checks: <file>, <file>` lists the Check files the Step needs. **Reserved:** parsed and exposed as `Step.checks`, not run yet. Each name is a file in the Track's `checks/` folder, so `checks: test_key.py` means `my-track/checks/test_key.py`. Names are relative to `checks/`, not to the Track folder, and a file that is not there is a validation error.
+   - `checks: <file>, <file>` lists the Check files the Step needs, by name, relative to the Track's `checks/` folder. Exposed as `Step.checks` and run by Run Checks (see Checks below). A Step with no `checks:` line has no Checks; the Learner marks it done by hand. A name that is not a file in `checks/` is a validation error.
 2. The explanation (Markdown, required). Shown first.
 3. Exactly one fenced Code Chunk whose info string is `<language> file=<path>`, where `<path>` is the target file in the Learner's agent project. Shown second, with the target file named. The Code Chunk must have code in it: an empty fence is a validation error.
 
 Nothing may follow the Code Chunk within a Step. Step ids are `<lesson file name>/<position>`, for example `01-call-an-llm/2`.
+
+### Checks
+
+Check files are pytest files in the Track's `checks/` folder. They ship with the Track and are readable by the Learner (the Step panel has an Open button per Check). They are not copied into the Learner's agent workspace. Run Checks runs each Check file as its own pytest run through uv:
+
+```
+uv run --with pytest pytest -q <track>/checks/<file> --rootdir <workspace>
+```
+
+with the Learner's agent workspace as the working directory and on `PYTHONPATH`, so a Check imports the Learner's code directly (`from app.config import KEY`). One Check file is one Check; it passes when pytest exits 0. A Step is done when all its Checks pass. Without `uv` or Python on the machine, the panel shows an explanatory message instead of results.
 
 ### Reflection
 
@@ -100,7 +110,15 @@ loadTrack(folder: string): Promise<LoadTrackResult>
 interface TrackSession {
   readonly track: Track;                      // Track > Lesson > Step structure
   getStep(stepId: string): Step | undefined;
+  setWorkspace(folder: string): void;        // the Learner's agent workspace, where Checks run
+  runChecks(stepId: string): Promise<RunChecksOutcome>;
+  markDone(stepId: string): boolean;         // only for Steps with no Checks
+  isDone(stepId: string): boolean;
+  advance(stepId: string): Step | undefined; // next Step, across Lessons, once this one is done
+  getProgress(): Progress;                   // { doneSteps: string[] }, in memory for now
 }
 ```
+
+`loadTrack(folder, { checkRunner })` takes an optional Check runner; tests inject a fake.
 
 The engine has no `vscode` import. The extension in `src/extension.ts` is a thin shell over it.

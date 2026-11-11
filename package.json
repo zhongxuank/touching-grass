@@ -13,7 +13,8 @@
   "contributes": {
     "commands": [
       { "command": "touchingGrass.openTrack", "title": "Open Track", "category": "Touching Grass" },
-      { "command": "touchingGrass.validateTrack", "title": "Validate Track", "category": "Touching Grass" }
+      { "command": "touchingGrass.validateTrack", "title": "Validate Track", "category": "Touching Grass" },
+      { "command": "touchingGrass.chooseWorkspace", "title": "Choose Agent Workspace", "category": "Touching Grass" }
     ],
     "viewsContainers": {
       "activitybar": [
