@@ -39,3 +39,7 @@ _Avoid_: Rule, best practice
 **Reflection**:
 One or two ungraded "why does this work?" questions at the end of a Lesson, answered in the Learner's own words.
 _Avoid_: Quiz, test
+
+**Provider**:
+An LLM API the Learner's agent calls: Claude (Anthropic), OpenAI, or OpenRouter. The first Lesson shows all three side by side, but the Learner needs a key for only one; Steps and Checks for Providers without a key are read-only and skipped. After that, the Learner picks one Provider for the rest of the Track.
+_Avoid_: Model, vendor, backend
