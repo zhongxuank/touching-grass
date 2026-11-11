@@ -12,7 +12,8 @@
   "activationEvents": [],
   "contributes": {
     "commands": [
-      { "command": "touchingGrass.openTrack", "title": "Open Track", "category": "Touching Grass" }
+      { "command": "touchingGrass.openTrack", "title": "Open Track", "category": "Touching Grass" },
+      { "command": "touchingGrass.chooseWorkspace", "title": "Choose Agent Workspace", "category": "Touching Grass" }
     ],
     "viewsContainers": {
       "activitybar": [
