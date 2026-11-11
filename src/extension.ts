@@ -29,6 +29,7 @@ export function activate(context: vscode.ExtensionContext): void {
   let trackFolder: string | undefined;
   /** The terminal running Claude Code as the Tutor, reused while it is open. */
   let tutorTerminal: vscode.Terminal | undefined;
+  let tutorFolder: string | undefined;
 
   /** Keep the Tutor's copy of the current Step up to date. Silent unless writing fails. */
   const syncCurrentStep = async () => {
@@ -42,8 +43,9 @@ export function activate(context: vscode.ExtensionContext): void {
   const askTutor = () => {
     const folder = session?.getWorkspace();
     if (!folder) return;
-    if (!tutorTerminal || tutorTerminal.exitStatus !== undefined) {
+    if (!tutorTerminal || tutorTerminal.exitStatus !== undefined || tutorFolder !== folder) {
       tutorTerminal = vscode.window.createTerminal({ name: "Claude tutor", cwd: folder });
+      tutorFolder = folder;
       tutorTerminal.sendText(`claude "${TUTOR_PROMPT}"`);
     }
     tutorTerminal.show();
