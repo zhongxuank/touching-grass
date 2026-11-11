@@ -35,6 +35,25 @@ describe("loadTrack", () => {
     expect(tagged!.explanation).toBe("Keep secrets in `.env`, never in code.");
   });
 
+  it("reads the Habit a Step calls out, which must be one of the Track's Habits", async () => {
+    const result = await loadTrack(fixture("valid-track"));
+    if (!result.ok) throw new Error(JSON.stringify(result.errors));
+    const [plain, tagged] = result.session.track.lessons[0]!.steps;
+    expect(plain!.habit).toBeUndefined();
+    expect(tagged!.habit).toBe("Keep secrets in .env");
+  });
+
+  it("reports a Habit that the Track does not list, naming the file and line", async () => {
+    const result = await loadTrack(fixture("bad-habit"));
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]!.file).toBe("lessons/01.md");
+    expect(result.errors[0]!.line).toBe(8);
+    expect(result.errors[0]!.message).toMatch(/Keep secrets in \.env/);
+    expect(result.errors[0]!.message).toMatch(/habits/);
+  });
+
   it("keeps the Reflection questions at the end of a Lesson", async () => {
     const result = await loadTrack(fixture("valid-track"));
     if (!result.ok) throw new Error(JSON.stringify(result.errors));

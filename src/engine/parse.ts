@@ -64,7 +64,7 @@ const STEP_HEADING = /^##\s+Step:\s*(.*?)\s*$/;
 const REFLECTION_HEADING = /^##\s+Reflection\s*$/;
 const ANY_H2 = /^##\s/;
 const FENCE_OPEN = /^```(\S*)\s*(.*?)\s*$/;
-const META_LINE = /^(provider|checks):\s*(.*?)\s*$/;
+const META_LINE = /^(provider|checks|habit):\s*(.*?)\s*$/;
 
 interface Section {
   heading: string;
@@ -91,7 +91,14 @@ function splitSections(body: string[], bodyStart: number) {
   return { intro: intro.join("\n").trim(), sections };
 }
 
-function parseStep(file: string, lessonId: string, position: number, section: Section, title: string): Parsed<Step> {
+function parseStep(
+  file: string,
+  lessonId: string,
+  position: number,
+  section: Section,
+  title: string,
+  habits: string[],
+): Parsed<Step> {
   const lines = section.lines;
   const fenceAt = lines.findIndex((l) => l.startsWith("```"));
   if (fenceAt === -1) {
@@ -113,12 +120,22 @@ function parseStep(file: string, lessonId: string, position: number, section: Se
   const before = lines.slice(0, fenceAt);
   let provider: string | undefined;
   let checks: string[] = [];
+  let habit: string | undefined;
   let i = 0;
   while (i < before.length && (before[i]!.trim() === "" || META_LINE.test(before[i]!))) {
     const m = META_LINE.exec(before[i]!);
     if (m) {
       if (m[1] === "provider") provider = m[2]!;
-      else checks = m[2]!.split(",").map((c) => c.trim()).filter(Boolean);
+      else if (m[1] === "habit") {
+        if (!habits.includes(m[2]!)) {
+          return fail(
+            file,
+            `Step "${title}": habit "${m[2]}" is not one of the Track's habits (${habits.join("; ") || "none listed"}).`,
+            section.line + i + 1,
+          );
+        }
+        habit = m[2]!;
+      } else checks = m[2]!.split(",").map((c) => c.trim()).filter(Boolean);
     }
     i++;
   }
@@ -132,10 +149,12 @@ function parseStep(file: string, lessonId: string, position: number, section: Se
   };
   const step: Step = { id: `${lessonId}/${position}`, title, explanation, codeChunk, checks };
   if (provider) step.provider = provider;
+  if (habit) step.habit = habit;
   return { value: step, errors: [] };
 }
 
-export function parseLessonFile(file: string, lessonId: string, text: string): Parsed<Lesson> {
+/** Parse a Lesson file. `habits` is the Track's Habit list, which a Step's `habit:` line must name. */
+export function parseLessonFile(file: string, lessonId: string, text: string, habits: string[] = []): Parsed<Lesson> {
   const fm = splitFrontMatter(text);
   if (!fm) return fail(file, "Missing front matter: a Lesson file starts with a --- block holding title.", 1);
   if (fm.data instanceof Error) return fail(file, `Front matter is not valid YAML: ${fm.data.message}`, 1);
@@ -154,7 +173,7 @@ export function parseLessonFile(file: string, lessonId: string, text: string): P
         errors.push({ file, line: section.line, message: "A Step heading needs a title: `## Step: <title>`." });
         continue;
       }
-      const result = parseStep(file, lessonId, steps.length + 1, section, stepTitle);
+      const result = parseStep(file, lessonId, steps.length + 1, section, stepTitle, habits);
       if (result.value) steps.push(result.value);
       else errors.push(...result.errors);
     } else if (REFLECTION_HEADING.test(section.heading)) {

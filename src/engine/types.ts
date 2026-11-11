@@ -17,6 +17,8 @@ export interface Step {
   provider?: string;
   /** Reserved: Check files this Step needs. Parsed, not run yet. */
   checks: string[];
+  /** A Habit of the Track this Step's Code Chunk models. Shown as a callout. */
+  habit?: string;
 }
 
 export interface Lesson {

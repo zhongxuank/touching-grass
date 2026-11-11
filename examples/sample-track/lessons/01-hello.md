@@ -13,7 +13,9 @@ print("hello, world")
 
 ## Step: Wrap it in a function
 
-Small functions are easier to test and reuse. This models the **Small functions** Habit.
+habit: Small functions
+
+Small functions are easier to test and reuse, so the greeting now lives in its own function.
 
 ```python file=hello/main.py
 def greet(name: str) -> str:

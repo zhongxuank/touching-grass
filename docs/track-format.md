@@ -63,9 +63,10 @@ KEY = os.environ["ANTHROPIC_API_KEY"]
 
 A `## Step: <title>` section. In order:
 
-1. Optional reserved metadata lines, directly after the heading:
+1. Optional metadata lines, directly after the heading:
    - `provider: <name>` marks the Step as specific to a Provider. **Reserved:** parsed and exposed as `Step.provider`, not acted on yet.
    - `checks: <file>, <file>` lists the Check files the Step needs. **Reserved:** parsed and exposed as `Step.checks`, not run yet.
+   - `habit: <name>` names the Track Habit the Step's Code Chunk models. The name must match one of the Track's `habits` exactly, or the Track fails validation. Shown as a callout between the explanation and the Code Chunk.
 2. The explanation (Markdown, required). Shown first.
 3. Exactly one fenced Code Chunk whose info string is `<language> file=<path>`, where `<path>` is the target file in the Learner's agent project. Shown second, with the target file named.
 
@@ -73,7 +74,7 @@ Nothing may follow the Code Chunk within a Step. Step ids are `<lesson file name
 
 ### Reflection
 
-An optional `## Reflection` section at the end of the Lesson: a bullet list of ungraded questions. Parsed into `Lesson.reflection`; the player does not show it yet.
+An optional `## Reflection` section at the end of the Lesson: a bullet list of ungraded questions. Parsed into `Lesson.reflection`. The player shows it as a "Reflection" item last under the Lesson in the sidebar, marked ungraded and optional.
 
 Any other `##` heading is a validation error. Validation errors name the file (relative to the Track folder) and the line.
 

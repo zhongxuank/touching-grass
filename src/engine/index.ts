@@ -45,7 +45,7 @@ export async function loadTrack(folder: string): Promise<LoadTrackResult> {
       continue;
     }
     const id = path.basename(rel, path.extname(rel));
-    const lesson = parseLessonFile(rel, id, text);
+    const lesson = parseLessonFile(rel, id, text, trackFile.value.habits);
     if (lesson.value) lessons.push(lesson.value);
     else errors.push(...lesson.errors);
   }
