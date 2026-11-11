@@ -35,3 +35,7 @@ _Avoid_: Grader, assessment
 **Habit**:
 A good engineering practice a Track deliberately models and calls out (e.g. keeping secrets in `.env`). Each Track names a few.
 _Avoid_: Rule, best practice
+
+**Reflection**:
+One or two ungraded "why does this work?" questions at the end of a Lesson, answered in the Learner's own words.
+_Avoid_: Quiz, test
