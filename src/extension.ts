@@ -67,8 +67,11 @@ export function activate(context: vscode.ExtensionContext): void {
       await saveProgress();
       render();
     } else if (msg.action === "next") {
+      await session.detectProviders();
       const next = session.advance(step.id);
+      tree.refresh();
       if (next) openStepById(next.id);
+      else if (session.providerChoiceNeeded()) await askProviderChoice();
     } else if (msg.action === "openCheck" && msg.check && step.checks.includes(msg.check)) {
       await vscode.window.showTextDocument(vscode.Uri.file(session.checkFilePath(msg.check)), {
         viewColumn: vscode.ViewColumn.One,
@@ -90,6 +93,25 @@ export function activate(context: vscode.ExtensionContext): void {
     panel.webview.html = document(randomBytes(16).toString("hex"), panel.webview.cspSource);
   };
 
+  /** Quick pick of the Providers that have a key. A single one is preselected but still confirmed. */
+  const askProviderChoice = async () => {
+    if (!session) return;
+    const available = session.getAvailableProviders();
+    const picked = await vscode.window.showQuickPick(
+      available.map((p) => ({ label: p, picked: available.length === 1 })),
+      {
+        title: "Choose your Provider for the rest of this Track",
+        placeHolder: "Later Steps will show only this Provider",
+        canPickMany: false,
+      },
+    );
+    if (!picked) return;
+    const next = session.chooseProvider(picked.label);
+    tree.refresh();
+    await saveProgress();
+    if (next) openStepById(next.id);
+  };
+
   const render = () => {
     if (!session || !current) return;
     const step = current;
@@ -99,6 +121,7 @@ export function activate(context: vscode.ExtensionContext): void {
       results,
       message,
       readOnly: session.isDone(step.id) && session.getCurrentStep() !== step.id,
+      noKeyProvider: session.missingProvider(step.id),
     };
     showDocument(step.title, (nonce, cspSource) => renderPanelDocument(step, state, nonce, cspSource));
   };
@@ -114,6 +137,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const openStepById = (stepId: string): Step | undefined => {
     const step = session?.openStep(stepId);
     if (step) {
+      void session?.detectProviders().then(render);
       showStep(step);
       void saveProgress();
     }
@@ -155,7 +179,11 @@ export function activate(context: vscode.ExtensionContext): void {
       const opened = result.session;
       session = opened;
       current = undefined;
-      tree.setTrack(opened.track, (id) => opened.isDone(id));
+      tree.setTrack(
+        opened.track,
+        (id) => opened.isDone(id),
+        (id) => opened.isVisible(id),
+      );
       if (workspace) {
         await attachWorkspace(workspace);
         resume();

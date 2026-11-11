@@ -1,5 +1,6 @@
 import * as path from "node:path";
 import { parse as parseYaml } from "yaml";
+import { isProvider, PROVIDERS } from "./providers";
 import type { CodeChunk, Lesson, Step, ValidationError } from "./types";
 
 export interface ParseLessonOptions {
@@ -191,7 +192,16 @@ function parseStep(
   while (i < before.length && (before[i]!.trim() === "" || META_LINE.test(before[i]!))) {
     const m = META_LINE.exec(before[i]!);
     if (m) {
-      if (m[1] === "provider") provider = m[2]!;
+      if (m[1] === "provider") {
+        if (!isProvider(m[2]!)) {
+          return fail(
+            file,
+            `Step "${title}": unknown Provider "${m[2]}". Use one of: ${PROVIDERS.join(", ")}.`,
+            section.line + i + 1,
+          );
+        }
+        provider = m[2]!;
+      }
       else if (m[1] === "habit") {
         const habits = options.habits;
         if (habits && !habits.includes(m[2]!)) {

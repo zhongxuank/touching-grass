@@ -35,10 +35,11 @@ const NO_PYTHON = /no interpreter found|no python|python.*not found|failed to (f
 export function createCheckRunner(options: CheckRunnerOptions = {}): CheckRunner {
   const uv = options.uvCommand ?? "uv";
   return {
-    async run({ workspace, checks }: CheckRunRequest): Promise<CheckRunOutcome> {
+    async run({ workspace, checks, env: requestEnv }: CheckRunRequest): Promise<CheckRunOutcome> {
       const env: NodeJS.ProcessEnv = {
         ...process.env,
         ...options.env,
+        ...requestEnv,
         PYTHONPATH: [workspace, process.env.PYTHONPATH].filter(Boolean).join(delimiter),
         PYTHONDONTWRITEBYTECODE: "1",
       };

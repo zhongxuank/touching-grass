@@ -19,6 +19,10 @@ export interface ProgressFile {
   doneSteps: string[];
   /** The Step the Learner is on. Resume opens it. */
   currentStep?: string;
+  /** Steps that counted as done because the Learner has no key for their Provider. Absent in older files. */
+  skippedSteps?: string[];
+  /** The Provider chosen after the first Provider Lesson. Absent in older files. */
+  chosenProvider?: string;
 }
 
 export type ParsedProgress = { ok: true; value: ProgressFile } | { ok: false; reason: string };
@@ -41,6 +45,12 @@ export function parseProgressFile(text: string): ParsedProgress {
   if (r.currentStep !== undefined && typeof r.currentStep !== "string") {
     return { ok: false, reason: "currentStep is not a Step id" };
   }
+  if (r.skippedSteps !== undefined && (!Array.isArray(r.skippedSteps) || !r.skippedSteps.every((s) => typeof s === "string"))) {
+    return { ok: false, reason: "skippedSteps is not a list of Step ids" };
+  }
+  if (r.chosenProvider !== undefined && typeof r.chosenProvider !== "string") {
+    return { ok: false, reason: "chosenProvider is not a Provider name" };
+  }
   return {
     ok: true,
     value: {
@@ -48,6 +58,8 @@ export function parseProgressFile(text: string): ParsedProgress {
       trackTitle: r.trackTitle,
       doneSteps: r.doneSteps as string[],
       ...(r.currentStep !== undefined ? { currentStep: r.currentStep as string } : {}),
+      ...(r.skippedSteps !== undefined ? { skippedSteps: r.skippedSteps as string[] } : {}),
+      ...(r.chosenProvider !== undefined ? { chosenProvider: r.chosenProvider as string } : {}),
     },
   };
 }
