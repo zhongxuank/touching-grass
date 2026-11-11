@@ -43,3 +43,7 @@ _Avoid_: Quiz, test
 **Provider**:
 An LLM API the Learner's agent calls: Claude (Anthropic), OpenAI, or OpenRouter. The first Lesson shows all three side by side, but the Learner needs a key for only one; Steps and Checks for Providers without a key are read-only and skipped. After that, the Learner picks one Provider for the rest of the Track.
 _Avoid_: Model, vendor, backend
+
+**Tutor**:
+An AI assistant (Claude Code) the Learner runs in their agent workspace to ask questions about the current Step. The extension never calls it (ADR 0003); it only writes a guide and the current Step into the workspace for it to read. The Tutor explains and hints; it does not type Code Chunks for the Learner.
+_Avoid_: Copilot, assistant, AI helper

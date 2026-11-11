@@ -40,6 +40,19 @@ export {
   type ProgressFile,
   type ProgressStore,
 } from "./progress";
+export {
+  CLAUDE_MD,
+  CURRENT_STEP_FILE,
+  renderCurrentStep,
+  renderTutorGuide,
+  TUTOR_GUIDE_FILE,
+  TUTOR_IMPORT_LINE,
+  TUTOR_PROMPT,
+  withTutorImport,
+  writeCurrentStep,
+  writeTutorGuide,
+  type TutorTrackInfo,
+} from "./tutor";
 import { createFileProgressStore, parseProgressFile, PROGRESS_FILE, serializeProgressFile, type ProgressFile, type ProgressStore } from "./progress";
 
 /** What opening a workspace found in its progress file. */
