@@ -133,7 +133,7 @@ export async function loadTrack(folder: string, options: LoadTrackOptions = {}):
       continue;
     }
     const id = path.basename(rel, path.extname(rel));
-    const lesson = parseLessonFile(rel, id, text, { checkFiles });
+    const lesson = parseLessonFile(rel, id, text, { checkFiles, habits: trackFile.value.habits });
     if (lesson.value) lessons.push(lesson.value);
     else errors.push(...lesson.errors);
   }

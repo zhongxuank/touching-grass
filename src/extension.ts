@@ -3,7 +3,7 @@ import { formatValidationError, loadTrack, type Step, type TrackSession } from "
 import { randomBytes } from "node:crypto";
 import { showValidationErrors } from "./diagnostics";
 import { registerPasteNudge } from "./pasteNudge";
-import { renderPanelDocument, type PanelState } from "./stepHtml";
+import { renderPanelDocument, renderReflectionDocument, renderTrackDocument, type PanelState } from "./stepHtml";
 import { TrackTree } from "./trackTree";
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -17,19 +17,6 @@ export function activate(context: vscode.ExtensionContext): void {
   let message: string | undefined;
   /** The Learner's agent workspace. Kept across Tracks, so a Track opened later resumes in it. */
   let workspace: string | undefined;
-
-  const render = () => {
-    if (!panel || !session || !current) return;
-    const state: PanelState = {
-      done: session.isDone(current.id),
-      hasNext: session.advance(current.id) !== undefined,
-      results,
-      message,
-      readOnly: session.isDone(current.id) && session.getCurrentStep() !== current.id,
-    };
-    panel.title = current.title;
-    panel.webview.html = renderPanelDocument(current, state, randomBytes(16).toString("hex"), panel.webview.cspSource);
-  };
 
   /** Wait for progress to reach the workspace, and say so if it could not be saved. */
   const saveProgress = async () => {
@@ -90,14 +77,33 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   };
 
-  const showStep = (step: Step) => {
+  /** The one panel, reused for Steps, Reflections and the Track overview. */
+  const showDocument = (title: string, document: (nonce: string, cspSource: string) => string) => {
     if (!panel) {
-      panel = vscode.window.createWebviewPanel("touchingGrass.step", step.title, vscode.ViewColumn.Beside, {
+      panel = vscode.window.createWebviewPanel("touchingGrass.step", title, vscode.ViewColumn.Beside, {
         enableScripts: true,
       });
       panel.onDidDispose(() => (panel = undefined), null, context.subscriptions);
       panel.webview.onDidReceiveMessage(onPanelMessage, null, context.subscriptions);
     }
+    panel.title = title;
+    panel.webview.html = document(randomBytes(16).toString("hex"), panel.webview.cspSource);
+  };
+
+  const render = () => {
+    if (!session || !current) return;
+    const step = current;
+    const state: PanelState = {
+      done: session.isDone(step.id),
+      hasNext: session.advance(step.id) !== undefined,
+      results,
+      message,
+      readOnly: session.isDone(step.id) && session.getCurrentStep() !== step.id,
+    };
+    showDocument(step.title, (nonce, cspSource) => renderPanelDocument(step, state, nonce, cspSource));
+  };
+
+  const showStep = (step: Step) => {
     current = step;
     results = undefined;
     message = undefined;
@@ -118,6 +124,12 @@ export function activate(context: vscode.ExtensionContext): void {
   const resume = () => {
     const id = session?.getCurrentStep();
     if (id) openStepById(id);
+  };
+
+  /** Reflection and overview panels have no Step controls, so no Step is current while they show. */
+  const showOverview = (title: string, document: (nonce: string, cspSource: string) => string) => {
+    current = undefined;
+    showDocument(title, document);
   };
 
   context.subscriptions.push(
@@ -161,6 +173,16 @@ export function activate(context: vscode.ExtensionContext): void {
       return folder;
     }),
     vscode.commands.registerCommand("touchingGrass.openStep", (stepId: string) => openStepById(stepId)?.title),
+    vscode.commands.registerCommand("touchingGrass.openReflection", (lessonId: string) => {
+      const lesson = session?.track.lessons.find((l) => l.id === lessonId);
+      if (lesson) showOverview(`Reflection: ${lesson.title}`, (n, c) => renderReflectionDocument(lesson, n, c));
+      return lesson?.title;
+    }),
+    vscode.commands.registerCommand("touchingGrass.openTrackOverview", () => {
+      const track = session?.track;
+      if (track) showOverview(track.title, (n, c) => renderTrackDocument(track, n, c));
+      return track?.title;
+    }),
     problems,
     vscode.commands.registerCommand("touchingGrass.validateTrack", async (folder?: vscode.Uri) => {
       const uri =

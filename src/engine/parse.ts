@@ -5,6 +5,8 @@ import type { CodeChunk, Lesson, Step, ValidationError } from "./types";
 export interface ParseLessonOptions {
   /** Check files that exist in the Track's `checks/` folder, relative to it. Omit to skip the check. */
   checkFiles?: ReadonlySet<string>;
+  /** The Track's Habits, which a Step's `habit:` line must name. Omit to skip the check. */
+  habits?: readonly string[];
 }
 
 export interface TrackFile {
@@ -128,7 +130,7 @@ const STEP_HEADING = /^##\s+Step:\s*(.*?)\s*$/;
 const REFLECTION_HEADING = /^##\s+Reflection\s*$/;
 const ANY_H2 = /^##\s/;
 const FENCE_OPEN = /^```(\S*)\s*(.*?)\s*$/;
-const META_LINE = /^(provider|checks):\s*(.*?)\s*$/;
+const META_LINE = /^(provider|checks|habit):\s*(.*?)\s*$/;
 
 interface Section {
   heading: string;
@@ -184,12 +186,23 @@ function parseStep(
   const before = lines.slice(0, fenceAt);
   let provider: string | undefined;
   let checks: string[] = [];
+  let habit: string | undefined;
   let i = 0;
   while (i < before.length && (before[i]!.trim() === "" || META_LINE.test(before[i]!))) {
     const m = META_LINE.exec(before[i]!);
     if (m) {
       if (m[1] === "provider") provider = m[2]!;
-      else checks = m[2]!.split(",").map((c) => c.trim()).filter(Boolean);
+      else if (m[1] === "habit") {
+        const habits = options.habits;
+        if (habits && !habits.includes(m[2]!)) {
+          return fail(
+            file,
+            `Step "${title}": habit "${m[2]}" is not one of the Track's habits (${habits.join("; ") || "none listed"}).`,
+            section.line + i + 1,
+          );
+        }
+        habit = m[2]!;
+      } else checks = m[2]!.split(",").map((c) => c.trim()).filter(Boolean);
     }
     i++;
   }
@@ -225,6 +238,7 @@ function parseStep(
   };
   const step: Step = { id: `${lessonId}/${position}`, title, explanation, codeChunk, checks };
   if (provider) step.provider = provider;
+  if (habit) step.habit = habit;
   return { value: step, errors: [] };
 }
 
