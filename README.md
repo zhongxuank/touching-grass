@@ -18,5 +18,6 @@ Then open this folder in VS Code and press F5 (the "Run Extension" launch config
 ```sh
 npm run typecheck   # tsc, strict
 npm test            # vitest engine unit tests
+npm run validate-track -- <folder>  # check a Track folder (after npm run build); see docs/track-format.md
 npm run test:smoke  # builds, then launches VS Code and checks the extension opens a fixture Track (downloads VS Code on first run)
 ```
