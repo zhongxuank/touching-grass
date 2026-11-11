@@ -4,3 +4,4 @@ dist/
 *.vsix
 .claude/worktrees/
 __pycache__/
+touching-grass.vsix

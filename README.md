@@ -41,25 +41,27 @@ OPENROUTER_MODEL=nvidia/nemotron-3.5-super-vl:free
 
 Pick a free model that supports tool calling (filter by "Tools" on [openrouter.ai/models](https://openrouter.ai/models?max_price=0)), or Lesson 2's agent will not work. Free models allow 20 requests a minute and 50 a day (1,000 a day once you have bought $10 of credits), may be slower or less reliable, and can be withdrawn. Their providers may log prompts, so send nothing private. If a Check that calls the real API fails, try again or switch `OPENROUTER_MODEL` back to empty to use the paid default.
 
-### 3. Build and launch the extension
+### 3. Install the extension
 
 ```sh
 git clone https://github.com/zhongxuank/touching-grass
 cd touching-grass
 npm ci
-npm run build
-code .
+npm run package
+code --install-extension touching-grass.vsix
 ```
 
-In VS Code, press **F5**. A second window opens, titled "Extension Development Host". Everything below happens in that window.
+This installs touching grass into your normal VS Code, like any other extension. The Tracks come with it. To update later, run `git pull && npm ci && npm run package` and install the new `touching-grass.vsix` the same way.
 
-### 4. Open the Track and your agent folder
+(If `code` is not found, open VS Code, open the command palette and run **Shell Command: Install 'code' command in PATH**. Or run **Extensions: Install from VSIX...** and pick the file.)
 
-1. Make an empty folder for the agent you are going to build, for example `~/my-agent`. Keep it outside this repo.
-2. Open the command palette (Ctrl+Shift+P, or Cmd+Shift+P on macOS) and run **Touching Grass: Open Track**. Pick `tracks/build-an-agent` in this repo.
-3. Run **Touching Grass: Choose Agent Workspace** and pick your empty folder.
+### 4. Open your agent folder and the Track
 
-The first Step opens. Read the explanation, type the Code Chunk into the file it names, and press **Run Checks**. Your progress is saved in the agent folder, so next time you open the same Track and folder you continue where you left off.
+1. Make an empty folder for the agent you are going to build, for example `~/my-agent`, and open it in VS Code (**File > Open Folder**). This window is where you work from now on.
+2. Open the command palette (Ctrl+Shift+P, or Cmd+Shift+P on macOS) and run **Touching Grass: Open Track**. Pick **build-an-agent**.
+3. Read the first Step, then press **Run Checks**. When it asks where you will write your code, pick **Use this window's folder**.
+
+Read each Step's explanation, type the Code Chunk into the file it names, and press **Run Checks**. Your progress is saved in the agent folder. Next time you open that folder in VS Code, the Track reopens at the Step where you left off.
 
 ### 5. Ask Claude when you are stuck (optional)
 
@@ -72,9 +74,9 @@ Claude acts as a Tutor, not as a pair programmer. When you choose your agent fol
 
 To make Claude Code load the guide, the extension also adds one line, `@.touching-grass/tutor.md`, to `CLAUDE.md` in your agent folder. It creates that file if you have none, and otherwise keeps what you wrote. Delete the line to turn the Tutor guide off.
 
-If you use the Claude Code VS Code extension instead of the terminal, open your agent folder as the window's folder first, so that Claude Code starts there.
+The Claude Code VS Code extension works too: because the window's folder is your agent folder, it starts there and reads the Tutor guide.
 
-## Run the extension locally from source
+## Run the extension from source (for development)
 
 Requires Node 20+ and VS Code 1.90+.
 

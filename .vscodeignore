@@ -1,0 +1,8 @@
+**
+!package.json
+!README.md
+!media/**
+!dist/extension.js
+!tracks/*/track.md
+!tracks/*/lessons/*.md
+!tracks/*/checks/*.py
