@@ -148,3 +148,15 @@ describe("Step panel", () => {
     expect(noChecksHtml).toContain('data-action="next"');
   });
 });
+
+describe("read-only Provider Step panel", () => {
+  it("says there is no key and offers no Run Checks", () => {
+    const html = renderPanelControls(
+      { ...step, checks: ["c.py"], provider: "openai" },
+      { done: false, hasNext: true, noKeyProvider: "openai" },
+    );
+    expect(html).toContain("No key for openai. Read along, your Checks are skipped.");
+    expect(html).not.toContain("runChecks");
+    expect(html).toContain('data-action="next"');
+  });
+});

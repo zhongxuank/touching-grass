@@ -22,7 +22,7 @@ function fakeRunner(failing: string[] = []) {
 }
 
 async function load(runner: CheckRunner) {
-  const result = await loadTrack(fixture("valid-track"), { checkRunner: runner });
+  const result = await loadTrack(fixture("valid-track"), { checkRunner: runner, processEnv: { ANTHROPIC_API_KEY: "test" } });
   if (!result.ok) throw new Error(JSON.stringify(result.errors));
   return result.session;
 }
@@ -48,6 +48,7 @@ describe("running Checks", () => {
       {
         workspace: "/learner/agent",
         checks: [{ name: "test_key.py", file: path.join(fixture("valid-track"), "checks", "test_key.py") }],
+        env: {},
       },
     ]);
   });
@@ -126,7 +127,10 @@ describe("advancing", () => {
     const session = await load(fakeRunner().runner);
     session.setWorkspace("/w");
     await session.runChecks(LAST_OF_LESSON_ONE);
-    expect(session.advance(LAST_OF_LESSON_ONE)?.id).toBe("02-second/1");
+    // Leaving the first Provider Lesson asks for a Provider choice first.
+    expect(session.advance(LAST_OF_LESSON_ONE)).toBeUndefined();
+    expect(session.providerChoiceNeeded()).toBe(true);
+    expect(session.chooseProvider("claude")?.id).toBe("02-second/1");
   });
 
   it("has no next Step after the last one", async () => {

@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import * as path from "node:path";
 import { checkLessonFileList, parseLessonFile, parseTrackFile } from "./parse";
 import { createCheckRunner } from "./checkRunner";
+import { isProvider, providersWithKeys, readEnvFile, type EnvReader, type Provider } from "./providers";
 import type { CheckRunner, Lesson, Progress, RunChecksOutcome, Step, Track, ValidationError } from "./types";
 
 export type {
@@ -18,6 +19,17 @@ export type {
   ValidationError,
 } from "./types";
 export { createCheckRunner } from "./checkRunner";
+export {
+  ENV_FILE,
+  isProvider,
+  parseEnv,
+  PROVIDER_KEY_VARS,
+  PROVIDERS,
+  providersWithKeys,
+  readEnvFile,
+  type EnvReader,
+  type Provider,
+} from "./providers";
 export { looksLikePastedChunk, PASTE_MATCH_RATIO, PASTE_MIN_LINES } from "./paste";
 export {
   createFileProgressStore,
@@ -28,7 +40,7 @@ export {
   type ProgressFile,
   type ProgressStore,
 } from "./progress";
-import { createFileProgressStore, parseProgressFile, PROGRESS_FILE, serializeProgressFile, type ProgressStore } from "./progress";
+import { createFileProgressStore, parseProgressFile, PROGRESS_FILE, serializeProgressFile, type ProgressFile, type ProgressStore } from "./progress";
 
 /** What opening a workspace found in its progress file. */
 export interface WorkspaceOpenResult {
@@ -49,7 +61,29 @@ export interface TrackSession {
    * progress made so far. Saves the merged progress. A file for another Track, or a corrupt one, is set aside as `.bak`.
    */
   openWorkspace(folder: string, store?: ProgressStore): Promise<WorkspaceOpenResult>;
-  /** Run the Step's Checks. The Step becomes done when every Check passes. */
+  /**
+   * Look for Provider keys again (the workspace `.env`, then the process environment) and return the Providers
+   * that have one. Presence only: no key value is ever returned. Run Checks and openWorkspace call this too.
+   */
+  detectProviders(): Promise<Provider[]>;
+  /** Providers with a key as of the last detection. */
+  getAvailableProviders(): Provider[];
+  /** The Provider the Step needs a key for but has none of: the Step is read-only. Undefined otherwise. */
+  missingProvider(stepId: string): string | undefined;
+  /** True when the Step counted as done because its Provider has no key. */
+  isSkipped(stepId: string): boolean;
+  /**
+   * True when `advance` held back the next Step because the Learner must first choose a Provider: they are
+   * leaving the first Lesson with Provider Steps and have not chosen. Pick from `getAvailableProviders()`.
+   */
+  providerChoiceNeeded(): boolean;
+  /** Save the Learner's Provider. Returns the Step `advance` held back. Unknown or keyless Providers are refused. */
+  chooseProvider(provider: string): Step | undefined;
+  getChosenProvider(): string | undefined;
+  /** The Steps the Learner sees, in order: after a choice, Provider Steps for other Providers in later Lessons are hidden. */
+  getVisibleSteps(): Step[];
+  isVisible(stepId: string): boolean;
+  /** Run the Step's Checks. The Step becomes done when every Check passes. A Step with no key for its Provider is skipped. */
   runChecks(stepId: string): Promise<RunChecksOutcome>;
   /** Mark a Step with no Checks done. Returns false for a Step that has Checks or does not exist. */
   markDone(stepId: string): boolean;
@@ -74,6 +108,10 @@ export interface TrackSession {
 export interface LoadTrackOptions {
   /** Defaults to the uv + pytest runner. Tests inject a fake. */
   checkRunner?: CheckRunner;
+  /** Reads the workspace `.env`. Defaults to the real file; tests inject a fake. */
+  readEnv?: EnvReader;
+  /** The fallback environment for Provider keys. Defaults to `process.env`. */
+  processEnv?: NodeJS.ProcessEnv;
 }
 
 export type LoadTrackResult =
@@ -144,6 +182,24 @@ export async function loadTrack(folder: string, options: LoadTrackOptions = {}):
   const order = lessons.flatMap((l) => l.steps);
   const runner = options.checkRunner ?? createCheckRunner();
   const done = new Set<string>();
+  const skipped = new Set<string>();
+  const readEnv = options.readEnv ?? readEnvFile;
+  const processEnv = options.processEnv ?? process.env;
+  let available: Provider[] = providersWithKeys({}, processEnv);
+  let dotEnv: Record<string, string> = {};
+  let chosen: Provider | undefined;
+  let held: Step | undefined;
+  const lessonOf = new Map(lessons.flatMap((l, i) => l.steps.map((s): [string, number] => [s.id, i])));
+  const firstProviderLesson = lessons.findIndex((l) => l.steps.some((s) => s.provider));
+  const visible = (s: Step) =>
+    !chosen || !s.provider || s.provider === chosen || lessonOf.get(s.id)! <= firstProviderLesson;
+  const detect = async (): Promise<Provider[]> => {
+    dotEnv = workspace ? await readEnv(workspace) : {};
+    available = providersWithKeys(dotEnv, processEnv);
+    return [...available];
+  };
+  const missing = (step: Step): string | undefined =>
+    step.provider && !available.includes(step.provider as Provider) ? step.provider : undefined;
   let current: string | undefined = order[0]?.id;
   let workspace: string | undefined;
   let store: ProgressStore | undefined;
@@ -157,6 +213,8 @@ export async function loadTrack(folder: string, options: LoadTrackOptions = {}):
       trackTitle: track.title,
       doneSteps: order.filter((s) => done.has(s.id)).map((s) => s.id),
       currentStep: current,
+      ...(skipped.size ? { skippedSteps: order.filter((s) => skipped.has(s.id)).map((s) => s.id) } : {}),
+      ...(chosen ? { chosenProvider: chosen } : {}),
     });
   /** Queue a save of the current progress. Saves run one after another; a failed save is reported by flush(). */
   const persist = () => {
@@ -186,7 +244,7 @@ export async function loadTrack(folder: string, options: LoadTrackOptions = {}):
       } catch (e) {
         notice = `Cannot read the progress file, so starting fresh: ${(e as Error).message}`;
       }
-      let saved: { trackTitle: string; doneSteps: string[]; currentStep?: string } | undefined;
+      let saved: ProgressFile | undefined;
       if (text !== undefined) {
         const parsed = parseProgressFile(text);
         const reason = !parsed.ok
@@ -207,23 +265,58 @@ export async function loadTrack(folder: string, options: LoadTrackOptions = {}):
       }
       const ids = new Set(order.map((s) => s.id));
       for (const id of saved?.doneSteps ?? []) if (ids.has(id)) done.add(id);
+      for (const id of saved?.skippedSteps ?? []) if (done.has(id)) skipped.add(id);
       if (saved?.currentStep && ids.has(saved.currentStep)) current = saved.currentStep;
+      if (saved?.chosenProvider && isProvider(saved.chosenProvider)) chosen = saved.chosenProvider;
+      await detect();
       persist();
       return notice ? { notice } : {};
     },
     getWorkspace: () => workspace,
+    detectProviders: detect,
+    getAvailableProviders: () => [...available],
+    missingProvider: (id) => {
+      const step = steps.get(id);
+      return step ? missing(step) : undefined;
+    },
+    isSkipped: (id) => skipped.has(id),
+    providerChoiceNeeded: () => held !== undefined,
+    chooseProvider(provider) {
+      if (!isProvider(provider) || !available.includes(provider)) return undefined;
+      chosen = provider;
+      const next = held ? order.slice(order.indexOf(held)).find(visible) : undefined;
+      held = undefined;
+      persist();
+      return next;
+    },
+    getChosenProvider: () => chosen,
+    getVisibleSteps: () => order.filter(visible),
+    isVisible: (id) => {
+      const step = steps.get(id);
+      return !!step && visible(step);
+    },
     async runChecks(stepId) {
       const step = steps.get(stepId);
       if (!step) throw new Error(`Unknown Step: ${stepId}`);
       if (!workspace) return { status: "no-workspace" };
+      await detect();
+      const absent = missing(step);
+      if (absent) {
+        done.add(stepId);
+        skipped.add(stepId);
+        persist();
+        return { status: "skipped", provider: absent };
+      }
       const outcome = await runner.run({
         workspace,
         checks: step.checks.map((name) => ({ name, file: checkFilePath(name) })),
+        env: dotEnv,
       });
       if (!outcome.ok) return { status: "tooling-missing", message: outcome.message };
       const passed = outcome.results.length > 0 && outcome.results.every((r) => r.passed);
       if (passed) {
         done.add(stepId);
+        skipped.delete(stepId);
         persist();
       }
       return { status: "ran", results: outcome.results, done: done.has(stepId) };
@@ -237,8 +330,26 @@ export async function loadTrack(folder: string, options: LoadTrackOptions = {}):
     },
     isDone: (id) => done.has(id),
     advance(stepId) {
-      if (!done.has(stepId)) return undefined;
-      return order[order.findIndex((s) => s.id === stepId) + 1];
+      const step = steps.get(stepId);
+      if (!step) return undefined;
+      if (!done.has(stepId)) {
+        // A Provider Step with no key is read-only: moving on counts it as done by skip.
+        if (!missing(step)) return undefined;
+        done.add(stepId);
+        skipped.add(stepId);
+        persist();
+      }
+      const at = order.indexOf(step);
+      const next = order.slice(at + 1).find(visible);
+      held = undefined;
+      if (!next) return undefined;
+      const leavingFirstProviderLesson =
+        lessonOf.get(stepId) === firstProviderLesson && lessonOf.get(next.id)! > firstProviderLesson;
+      if (!chosen && available.length > 0 && leavingFirstProviderLesson) {
+        held = next;
+        return undefined;
+      }
+      return next;
     },
     checkFilePath,
     getProgress: () => ({ doneSteps: order.filter((s) => done.has(s.id)).map((s) => s.id), currentStep: current }),

@@ -10,7 +10,10 @@ const WITH_CHECKS = "01-first/2";
 const SECOND_LESSON = "02-second/1";
 
 async function load() {
-  const result = await loadTrack(fixture("valid-track"), { checkRunner: { run: async () => ({ ok: true, results: [] }) } });
+  const result = await loadTrack(fixture("valid-track"), {
+    checkRunner: { run: async () => ({ ok: true, results: [] }) },
+    processEnv: { ANTHROPIC_API_KEY: "test" },
+  });
   if (!result.ok) throw new Error(JSON.stringify(result.errors));
   return result.session;
 }

@@ -13,11 +13,17 @@ export class TrackTree implements vscode.TreeDataProvider<Node> {
   readonly onDidChangeTreeData = this.changed.event;
   private track: Track | undefined;
   private isDone: (stepId: string) => boolean = () => false;
+  private isVisible: (stepId: string) => boolean = () => true;
 
   /** `isDone` tells the tree which Steps to show with a check icon. */
-  setTrack(track: Track | undefined, isDone: (stepId: string) => boolean = () => false): void {
+  setTrack(
+    track: Track | undefined,
+    isDone: (stepId: string) => boolean = () => false,
+    isVisible: (stepId: string) => boolean = () => true,
+  ): void {
     this.track = track;
     this.isDone = isDone;
+    this.isVisible = isVisible;
     this.changed.fire();
   }
 
@@ -32,7 +38,9 @@ export class TrackTree implements vscode.TreeDataProvider<Node> {
       return [{ kind: "about" }, ...this.track.lessons.map((lesson): Node => ({ kind: "lesson", lesson }))];
     }
     if (node.kind !== "lesson") return [];
-    const steps: Node[] = node.lesson.steps.map((step) => ({ kind: "step", step }));
+    const steps: Node[] = node.lesson.steps
+      .filter((step) => this.isVisible(step.id))
+      .map((step): Node => ({ kind: "step", step }));
     // The Reflection comes last, after the Lesson's final Step.
     return node.lesson.reflection.length ? [...steps, { kind: "reflection", lesson: node.lesson }] : steps;
   }

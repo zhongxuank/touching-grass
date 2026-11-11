@@ -68,7 +68,7 @@ KEY = os.environ["ANTHROPIC_API_KEY"]
 A `## Step: <title>` section. In order:
 
 1. Optional metadata lines, directly after the heading:
-   - `provider: <name>` marks the Step as specific to a Provider. **Reserved:** parsed and exposed as `Step.provider`, not acted on yet.
+   - `provider: <name>` marks the Step as specific to a Provider: `claude`, `openai` or `openrouter`. Any other name is a validation error naming the file and line. Exposed as `Step.provider`; see Providers below.
    - `checks: <file>, <file>` lists the Check files the Step needs, by name, relative to the Track's `checks/` folder. Exposed as `Step.checks` and run by Run Checks (see Checks below). A Step with no `checks:` line has no Checks; the Learner marks it done by hand. A name that is not a file in `checks/` is a validation error.
    - `habit: <name>` names the Track Habit the Step's Code Chunk models. The name must match one of the Track's `habits` exactly, or the Track fails validation. Shown as a callout between the explanation and the Code Chunk.
 2. The explanation (Markdown, required). Shown first.
@@ -85,6 +85,21 @@ uv run --with pytest pytest -q <track>/checks/<file> --rootdir <workspace>
 ```
 
 with the Learner's agent workspace as the working directory and on `PYTHONPATH`, so a Check imports the Learner's code directly (`from app.config import KEY`). One Check file is one Check; it passes when pytest exits 0. A Step is done when all its Checks pass. Without `uv` or Python on the machine, the panel shows an explanatory message instead of results.
+
+### Providers
+
+The Provider names and the key each needs in the Learner's `.env` (or, as a fallback, the process environment):
+
+| Provider     | Key                  |
+| ------------ | -------------------- |
+| `claude`     | `ANTHROPIC_API_KEY`  |
+| `openai`     | `OPENAI_API_KEY`     |
+| `openrouter` | `OPENROUTER_API_KEY` |
+
+The player only checks that a key is present and non-empty; it never shows or logs a key. Keys are looked up again each time Checks are run, so adding one later needs no reload. The Learner's `.env` values are passed to the Check runner's environment, so Checks can call a real LLM.
+
+- **Read-only Steps.** A Provider Step whose key is missing is read-only: the panel says "No key for <Provider>. Read along, your Checks are skipped." Its Checks do not run and it counts as done for progression (recorded in `skippedSteps` in the progress file), so one key is enough to finish the first Lesson. Adding the key later and running Checks runs them normally.
+- **Choice.** When the Learner advances out of the first Lesson that contains Provider Steps and has not chosen, the player asks them to choose one of the Providers that have a key. The choice is saved as `chosenProvider` in the progress file. From then on, Provider Steps for other Providers in later Lessons are hidden from the Step order and the sidebar. Steps with no `provider:` line always show. A Track meant for this should put side-by-side Provider Steps in its first Provider Lesson.
 
 ### Reflection
 
@@ -116,7 +131,11 @@ interface TrackSession {
   runChecks(stepId: string): Promise<RunChecksOutcome>;
   markDone(stepId: string): boolean;         // only for Steps with no Checks
   isDone(stepId: string): boolean;
-  advance(stepId: string): Step | undefined; // next Step, across Lessons, once this one is done
+  advance(stepId: string): Step | undefined; // next visible Step, across Lessons, once this one is done (or skipped)
+  detectProviders(): Promise<Provider[]>;    // Providers with a key; presence only
+  providerChoiceNeeded(): boolean;           // advance held the next Step until a Provider is chosen
+  chooseProvider(provider: string): Step | undefined; // saves the choice; returns the held Step
+  getVisibleSteps(): Step[];                 // Steps after Provider filtering
   getCurrentStep(): string | undefined;      // the Step the Learner is on; the first Step if none yet
   openStep(stepId: string): Step | undefined; // open in the panel; an unfinished Step becomes current
   getProgress(): Progress;                   // { doneSteps: string[], currentStep?: string }
@@ -124,7 +143,7 @@ interface TrackSession {
 }
 ```
 
-`loadTrack(folder, { checkRunner })` takes an optional Check runner; tests inject a fake.
+`loadTrack(folder, { checkRunner, readEnv, processEnv })` takes an optional Check runner, `.env` reader and fallback environment; tests inject fakes.
 
 ## Progress file
 
@@ -135,13 +154,16 @@ Progress lives in the Learner's agent workspace at `.touching-grass/progress.jso
   "version": 1,
   "trackTitle": "Build an AI agent from scratch",
   "doneSteps": ["01-call-an-llm/1", "01-call-an-llm/2"],
-  "currentStep": "01-call-an-llm/3"
+  "currentStep": "01-call-an-llm/3",
+  "skippedSteps": ["01-call-an-llm/2"],
+  "chosenProvider": "claude"
 }
 ```
 
 - `trackTitle` identifies the Track. A file for another Track is ignored and copied to `progress.json.bak`.
 - A file that is not valid (bad JSON, unknown `version`, wrong field types) is copied to `progress.json.bak` and progress starts fresh.
 - Step ids that no longer exist in the Track are dropped on load.
-- New fields (for example `chosenProvider`) are added to `ProgressFile` in `src/engine/progress.ts`.
+- `skippedSteps` and `chosenProvider` are optional; files without them load fine.
+- New fields are added to `ProgressFile` in `src/engine/progress.ts`.
 
 The engine has no `vscode` import. The extension in `src/extension.ts` is a thin shell over it.

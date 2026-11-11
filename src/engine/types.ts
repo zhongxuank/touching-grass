@@ -13,7 +13,7 @@ export interface Step {
   /** Markdown. Shown to the Learner before the Code Chunk. */
   explanation: string;
   codeChunk: CodeChunk;
-  /** Reserved: Provider this Step is specific to. Parsed, not acted on yet. */
+  /** The Provider this Step is specific to. Without a key for it the Step is read-only; see the Track format. */
   provider?: string;
   /** Check files this Step needs, named relative to the Track's `checks/` folder. */
   checks: string[];
@@ -60,6 +60,8 @@ export interface CheckRunRequest {
   workspace: string;
   /** Check files to run: their names and absolute paths inside the Track folder. */
   checks: { name: string; file: string }[];
+  /** Extra environment for the Checks: the Learner's `.env` values, so Checks can call a real LLM. */
+  env?: Record<string, string>;
 }
 
 export type CheckRunOutcome =
@@ -75,6 +77,8 @@ export interface CheckRunner {
 export type RunChecksOutcome =
   | { status: "no-workspace" }
   | { status: "tooling-missing"; message: string }
+  /** The Step is for a Provider with no key: Checks were skipped and the Step counts as done. */
+  | { status: "skipped"; provider: string }
   | { status: "ran"; results: CheckResult[]; done: boolean };
 
 /** Learner progress. Plain JSON-safe data so a later ticket can save and restore it. */
@@ -83,4 +87,8 @@ export interface Progress {
   doneSteps: string[];
   /** The Step the Learner is on. */
   currentStep?: string;
+  /** The Provider the Learner chose after the first Provider Lesson, if they have. */
+  chosenProvider?: string;
+  /** Ids of Steps counted as done because their Provider has no key. A subset of `doneSteps`. */
+  skippedSteps?: string[];
 }

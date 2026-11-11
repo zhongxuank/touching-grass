@@ -50,11 +50,20 @@ export interface PanelState {
   message?: string;
   /** An earlier done Step, opened to re-read: no Run Checks or Mark done. Next Step still works. */
   readOnly?: boolean;
+  /** Set when the Step is for a Provider the Learner has no key for: read-only, Checks skipped. */
+  noKeyProvider?: string;
 }
 
 /** Controls and results below the Step: Run Checks (or Mark done), results, Next Step. */
 export function renderPanelControls(step: Step, state: PanelState): string {
   const parts: string[] = [];
+  if (state.noKeyProvider) {
+    parts.push(
+      `<p class="notice">No key for ${escape(state.noKeyProvider)}. Read along, your Checks are skipped.</p>`,
+      state.hasNext ? '<button data-action="next">Next Step</button>' : "<p>That was the last Step.</p>",
+    );
+    return parts.join("\n");
+  }
   if (step.checks.length) {
     parts.push(
       `<section class="checks"><h2>Checks</h2><ul>${step.checks
