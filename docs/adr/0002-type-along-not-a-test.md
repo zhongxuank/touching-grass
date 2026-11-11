@@ -1,0 +1,3 @@
+# Steps show real code to type, not puzzles to solve
+
+Each Step shows a real Code Chunk with an explanation, and the Learner types it by hand. The tool does not hide the answer or test the Learner's Python ability: the goal is understanding how an agent is built and keeping the muscle memory of writing code, not proving skill. We rejected the exercise model (stubs plus hidden solutions plus graduated hints) common in tools like Rustlings, because it optimises for problem-solving practice rather than understanding a build end to end. Checks still exist, but only to confirm the typed code works.
