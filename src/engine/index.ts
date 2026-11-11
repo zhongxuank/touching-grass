@@ -4,6 +4,7 @@ import { parseLessonFile, parseTrackFile } from "./parse";
 import type { Lesson, Step, Track, ValidationError } from "./types";
 
 export type { CodeChunk, Lesson, Step, Track, ValidationError } from "./types";
+export { looksLikePastedChunk, PASTE_MATCH_RATIO, PASTE_MIN_LINES } from "./paste";
 
 /** A loaded Track. Later tickets hang progress, Provider choice and Check results here. */
 export interface TrackSession {
