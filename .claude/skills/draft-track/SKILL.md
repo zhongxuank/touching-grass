@@ -50,10 +50,11 @@ A Check confirms the Learner's typed code works. It is not a quiz.
 ## 4. Verify
 
 1. Keep a reference solution: the Learner workspace after the last Step, in `<track>/reference/`. Generate it from the Lessons so it cannot drift: `python3 -I .claude/skills/draft-track/extract-reference.py <track>` writes every Code Chunk to its `file=` path, later Steps overwriting earlier ones.
-2. Run each Check the way the player does, from the reference folder:
+2. Verify cumulatively, Step by Step: `python3 -I .claude/skills/draft-track/verify-steps.py <track> --all-providers`. For each Step in order it builds a fresh workspace from Code Chunks 1..N and runs that Step's Checks against it, with API keys removed from the environment (so key Checks must skip). With `--all-providers` it also replays the Track as a Learner with one key, leaving out Steps for the other Providers, which catches a file that imports another Provider's file. Every Check must pass or skip. Report the per-Step results to the Learner.
+3. Optionally run each Check against the final reference the way the player does, from the reference folder:
    `PYTHONPATH=$PWD uv run --with pytest pytest -q <track>/checks/<file> --rootdir $PWD`
    When a Check needs an API key you do not have, say so and skip it. Remove `uv.lock`, `.venv` and `__pycache__` from `reference/` afterwards.
-3. Run `npm run build` once, then `npm run validate-track -- <track>`. It prints `file:line: message` per problem. Fix every error and run it again. Done when it prints `OK`.
+4. Run `npm run build` once, then `npm run validate-track -- <track>`. It prints `file:line: message` per problem. Fix every error and run it again. Done when it prints `OK`.
 
 A Check that fails against the reference is a bug in the Check or in a Chunk: fix the file, then regenerate the reference.
 
