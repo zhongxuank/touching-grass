@@ -13,6 +13,7 @@ print("hello, world")
 
 ## Step: Wrap it in a function
 
+checks: test_greet.py
 habit: Small functions
 
 Small functions are easier to test and reuse, so the greeting now lives in its own function.

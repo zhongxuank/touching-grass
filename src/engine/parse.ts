@@ -1,5 +1,13 @@
+import * as path from "node:path";
 import { parse as parseYaml } from "yaml";
 import type { CodeChunk, Lesson, Step, ValidationError } from "./types";
+
+export interface ParseLessonOptions {
+  /** Check files that exist in the Track's `checks/` folder, relative to it. Omit to skip the check. */
+  checkFiles?: ReadonlySet<string>;
+  /** The Track's Habits, which a Step's `habit:` line must name. Omit to skip the check. */
+  habits?: readonly string[];
+}
 
 export interface TrackFile {
   title: string;
@@ -38,6 +46,64 @@ function stringList(value: unknown): string[] | undefined {
   if (value === undefined || value === null) return [];
   if (Array.isArray(value) && value.every((v) => typeof v === "string")) return value as string[];
   return undefined;
+}
+
+/** Entries of the `lessons:` list in the front matter, with their one-based line numbers. */
+function lessonListEntries(text: string): { value: string; line: number }[] {
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  const entries: { value: string; line: number }[] = [];
+  let inList = false;
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (line.trim() === "---") break;
+    if (/^lessons:/.test(line)) {
+      inList = true;
+      continue;
+    }
+    const item = /^\s*-\s*(.*?)\s*$/.exec(line);
+    if (inList && item) {
+      entries.push({ value: item[1]!.replace(/^["']|["']$/g, ""), line: i + 1 });
+    } else if (line.trim() !== "") {
+      inList = false;
+    }
+  }
+  return entries;
+}
+
+/**
+ * Checks the `lessons` list as a whole: each Lesson file is listed once, and no two Lesson files
+ * share an id (file name without extension), since Step ids are built from that id.
+ */
+export function checkLessonFileList(file: string, text: string, lessonFiles: string[]): ValidationError[] {
+  const errors: ValidationError[] = [];
+  const entries = lessonListEntries(text);
+  const lineOf = (index: number) => entries[index]?.line ?? 1;
+  const firstLine = new Map<string, number>();
+  const idOwner = new Map<string, string>();
+  lessonFiles.forEach((rel, index) => {
+    const key = path.posix.normalize(rel);
+    if (firstLine.has(key)) {
+      errors.push({
+        file,
+        line: lineOf(index),
+        message: `"${rel}" is listed twice. List each Lesson file once, in the order to follow: remove this line.`,
+      });
+      return;
+    }
+    firstLine.set(key, lineOf(index));
+    const id = path.posix.basename(key, path.posix.extname(key));
+    const owner = idOwner.get(id);
+    if (owner !== undefined) {
+      errors.push({
+        file,
+        line: lineOf(index),
+        message: `"${rel}" and "${owner}" both have the Lesson id "${id}" (the file name without its extension). Step ids are built from it, so rename one of the files to a unique name.`,
+      });
+    } else {
+      idOwner.set(id, rel);
+    }
+  });
+  return errors;
 }
 
 export function parseTrackFile(file: string, text: string): Parsed<TrackFile> {
@@ -97,7 +163,7 @@ function parseStep(
   position: number,
   section: Section,
   title: string,
-  habits: string[],
+  options: ParseLessonOptions,
 ): Parsed<Step> {
   const lines = section.lines;
   const fenceAt = lines.findIndex((l) => l.startsWith("```"));
@@ -127,7 +193,8 @@ function parseStep(
     if (m) {
       if (m[1] === "provider") provider = m[2]!;
       else if (m[1] === "habit") {
-        if (!habits.includes(m[2]!)) {
+        const habits = options.habits;
+        if (habits && !habits.includes(m[2]!)) {
           return fail(
             file,
             `Step "${title}": habit "${m[2]}" is not one of the Track's habits (${habits.join("; ") || "none listed"}).`,
@@ -142,10 +209,32 @@ function parseStep(
   const explanation = before.slice(i).join("\n").trim();
   if (!explanation) return fail(file, `Step "${title}" has no explanation: it must come before the Code Chunk.`, section.line);
 
+  const code = lines.slice(fenceAt + 1, closeAt).join("\n");
+  if (!code.trim()) {
+    return fail(
+      file,
+      `Step "${title}": the Code Chunk is empty. Put the code the Learner types between the fences.`,
+      fenceLine,
+    );
+  }
+
+  if (options.checkFiles) {
+    const checksLine = section.line + before.findIndex((l) => META_LINE.exec(l)?.[1] === "checks") + 1;
+    for (const name of checks) {
+      if (!options.checkFiles.has(name)) {
+        return fail(
+          file,
+          `Step "${title}" lists Check file "${name}", but checks/${name} does not exist in the Track. Create it in the Track's checks/ folder, or fix the name in \`checks:\`.`,
+          checksLine,
+        );
+      }
+    }
+  }
+
   const codeChunk: CodeChunk = {
     language: open[1]!,
     targetFile: fileAttr[1]!,
-    code: lines.slice(fenceAt + 1, closeAt).join("\n"),
+    code,
   };
   const step: Step = { id: `${lessonId}/${position}`, title, explanation, codeChunk, checks };
   if (provider) step.provider = provider;
@@ -153,8 +242,12 @@ function parseStep(
   return { value: step, errors: [] };
 }
 
-/** Parse a Lesson file. `habits` is the Track's Habit list, which a Step's `habit:` line must name. */
-export function parseLessonFile(file: string, lessonId: string, text: string, habits: string[] = []): Parsed<Lesson> {
+export function parseLessonFile(
+  file: string,
+  lessonId: string,
+  text: string,
+  options: ParseLessonOptions = {},
+): Parsed<Lesson> {
   const fm = splitFrontMatter(text);
   if (!fm) return fail(file, "Missing front matter: a Lesson file starts with a --- block holding title.", 1);
   if (fm.data instanceof Error) return fail(file, `Front matter is not valid YAML: ${fm.data.message}`, 1);
@@ -173,7 +266,7 @@ export function parseLessonFile(file: string, lessonId: string, text: string, ha
         errors.push({ file, line: section.line, message: "A Step heading needs a title: `## Step: <title>`." });
         continue;
       }
-      const result = parseStep(file, lessonId, steps.length + 1, section, stepTitle, habits);
+      const result = parseStep(file, lessonId, steps.length + 1, section, stepTitle, options);
       if (result.value) steps.push(result.value);
       else errors.push(...result.errors);
     } else if (REFLECTION_HEADING.test(section.heading)) {

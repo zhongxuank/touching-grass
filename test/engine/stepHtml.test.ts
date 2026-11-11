@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { renderReflectionHtml, renderStepHtml, renderTrackHtml } from "../../src/stepHtml";
+import {
+  renderPanelControls,
+  renderPanelDocument,
+  renderReflectionDocument,
+  renderReflectionHtml,
+  renderStepHtml,
+  renderTrackDocument,
+  renderTrackHtml,
+} from "../../src/stepHtml";
 import type { Lesson, Step, Track } from "../../src/engine";
 
 const step: Step = {
@@ -81,5 +89,53 @@ describe("renderStepHtml", () => {
     const html = renderStepHtml(step);
     expect(html).toContain("print(&quot;&lt;hi&gt;&quot;)");
     expect(html).toContain("Say &lt;hello&gt;");
+  });
+});
+
+describe("Step panel", () => {
+  const withChecks: Step = { ...step, checks: ["test_a.py", "test_b.py"] };
+
+  it("has a strict CSP allowing only the nonce'd script", () => {
+    const html = renderPanelDocument(step, { done: false, hasNext: false }, "abc123", "vscode-resource:");
+    expect(html).toContain("default-src 'none'");
+    expect(html).toContain("script-src 'nonce-abc123'");
+    expect(html).toContain('<script nonce="abc123">');
+  });
+
+  it("lists each Check with its result and failure output, and lets the Learner open it", () => {
+    const html = renderPanelControls(withChecks, {
+      done: false,
+      hasNext: true,
+      results: [
+        { check: "test_a.py", passed: true, output: "" },
+        { check: "test_b.py", passed: false, output: "assert <1> == 2" },
+      ],
+    });
+    expect(html).toContain('data-action="runChecks"');
+    expect(html).toContain('data-action="openCheck" data-check="test_b.py"');
+    expect(html).toContain("assert &lt;1&gt; == 2");
+    expect(html).not.toContain("Next Step");
+  });
+
+  it("offers Next Step once the Step is done", () => {
+    expect(renderPanelControls(withChecks, { done: true, hasNext: true })).toContain('data-action="next"');
+  });
+
+  it("gives Reflection and overview panels the same CSP document but no Step controls", () => {
+    const lesson: Lesson = { id: "l", title: "L", intro: "", steps: [step], reflection: ["Why?"] };
+    const track: Track = { title: "T", habits: ["H"], lessons: [lesson] };
+    for (const html of [
+      renderReflectionDocument(lesson, "abc123", "vscode-resource:"),
+      renderTrackDocument(track, "abc123", "vscode-resource:"),
+    ]) {
+      expect(html).toContain("script-src 'nonce-abc123'");
+      expect(html).not.toContain('data-action="');
+    }
+  });
+
+  it("offers Mark done for a Step with no Checks", () => {
+    const html = renderPanelControls(step, { done: false, hasNext: true });
+    expect(html).toContain('data-action="markDone"');
+    expect(html).not.toContain("Run Checks");
   });
 });

@@ -15,7 +15,7 @@ export interface Step {
   codeChunk: CodeChunk;
   /** Reserved: Provider this Step is specific to. Parsed, not acted on yet. */
   provider?: string;
-  /** Reserved: Check files this Step needs. Parsed, not run yet. */
+  /** Check files this Step needs, named relative to the Track's `checks/` folder. */
   checks: string[];
   /** A Habit of the Track this Step's Code Chunk models. Shown as a callout. */
   habit?: string;
@@ -44,4 +44,41 @@ export interface ValidationError {
   file: string;
   line?: number;
   message: string;
+}
+
+/** What the Check runner reports for one Check (one Check file). */
+export interface CheckResult {
+  /** The Check file name as written in the Step's `checks:` line. */
+  check: string;
+  passed: boolean;
+  /** pytest's output for this Check, shown to the Learner when it fails. */
+  output: string;
+}
+
+export interface CheckRunRequest {
+  /** The Learner's agent workspace: pytest runs here and imports the Learner's code from here. */
+  workspace: string;
+  /** Check files to run: their names and absolute paths inside the Track folder. */
+  checks: { name: string; file: string }[];
+}
+
+export type CheckRunOutcome =
+  | { ok: true; results: CheckResult[] }
+  /** uv or Python could not be run, so no Check ran. */
+  | { ok: false; reason: "tooling-missing"; message: string };
+
+/** Runs Checks. Injected into the engine so tests can use a fake. */
+export interface CheckRunner {
+  run(request: CheckRunRequest): Promise<CheckRunOutcome>;
+}
+
+export type RunChecksOutcome =
+  | { status: "no-workspace" }
+  | { status: "tooling-missing"; message: string }
+  | { status: "ran"; results: CheckResult[]; done: boolean };
+
+/** Learner progress. Plain JSON-safe data so a later ticket can save and restore it. */
+export interface Progress {
+  /** Ids of the Steps whose Checks have passed (or that were marked done). */
+  doneSteps: string[];
 }

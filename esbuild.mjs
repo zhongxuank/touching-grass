@@ -2,7 +2,11 @@ import { build, context } from "esbuild";
 
 const watch = process.argv.includes("--watch");
 const options = {
-  entryPoints: { extension: "src/extension.ts", "test/smoke": "test/smoke/smoke.test.ts" },
+  entryPoints: {
+    extension: "src/extension.ts",
+    validate: "src/cli/validate.ts",
+    "test/smoke": "test/smoke/smoke.test.ts",
+  },
   bundle: true,
   platform: "node",
   format: "cjs",

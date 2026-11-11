@@ -39,3 +39,81 @@ export function renderTrackHtml(track: Track): string {
 <p>Good engineering practices this Track models and calls out in its Steps.</p>
 ${habits}`;
 }
+
+/** What the Step panel shows beyond the Step itself. Plain data so the shell holds no domain logic. */
+export interface PanelState {
+  done: boolean;
+  hasNext: boolean;
+  /** Set when Run Checks has run; per-Check results. */
+  results?: { check: string; passed: boolean; output: string }[];
+  /** A notice such as "uv was not found" or "choose a workspace". */
+  message?: string;
+}
+
+/** Controls and results below the Step: Run Checks (or Mark done), results, Next Step. */
+export function renderPanelControls(step: Step, state: PanelState): string {
+  const parts: string[] = [];
+  if (step.checks.length) {
+    parts.push(
+      `<section class="checks"><h2>Checks</h2><ul>${step.checks
+        .map((c) => {
+          const r = state.results?.find((x) => x.check === c);
+          const badge = r ? (r.passed ? '<span class="pass">passed</span>' : '<span class="fail">failed</span>') : "";
+          return `<li><code>${escape(c)}</code> ${badge} <button class="link" data-action="openCheck" data-check="${escape(c)}">Open</button>${
+            r && !r.passed ? `<pre class="output">${escape(r.output)}</pre>` : ""
+          }</li>`;
+        })
+        .join("")}</ul>
+<button data-action="runChecks">Run Checks</button></section>`,
+    );
+  } else if (!state.done) {
+    parts.push(`<section class="checks"><p>This Step has no Checks.</p><button data-action="markDone">Mark done</button></section>`);
+  }
+  if (state.message) parts.push(`<p class="notice">${escape(state.message)}</p>`);
+  if (state.done) {
+    parts.push(
+      `<p class="pass">Step done.</p>${state.hasNext ? '<button data-action="next">Next Step</button>' : "<p>That was the last Step.</p>"}`,
+    );
+  }
+  return parts.join("\n");
+}
+
+/** Full webview document with a strict CSP: only the one nonce'd script runs. Shared by every panel. */
+export function renderDocument(body: string, nonce: string, cspSource: string): string {
+  const csp = `default-src 'none'; style-src ${cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';`;
+  return `<!doctype html><html><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="${csp}">
+<style>
+  body { font-family: var(--vscode-font-family); padding: 1rem 1.5rem; line-height: 1.5; }
+  pre { padding: 0.75rem; overflow-x: auto; background: var(--vscode-textCodeBlock-background); }
+  .target-file { opacity: 0.8; }
+  .pass { color: var(--vscode-testing-iconPassed, green); }
+  .fail { color: var(--vscode-testing-iconFailed, red); }
+  button.link { background: none; border: none; color: var(--vscode-textLink-foreground); cursor: pointer; padding: 0; }
+  .output { white-space: pre-wrap; }
+  .habit-callout { border-left: 3px solid var(--vscode-textLink-foreground); padding: 0.25rem 0.75rem; margin: 1rem 0; }
+  .reflection-note { opacity: 0.8; font-style: italic; }
+</style></head><body>${body}
+<script nonce="${nonce}">
+  const vscode = acquireVsCodeApi();
+  document.addEventListener("click", (e) => {
+    const el = e.target.closest("[data-action]");
+    if (el) vscode.postMessage({ action: el.dataset.action, check: el.dataset.check });
+  });
+</script></body></html>`;
+}
+
+/** The Step panel document: the Step, then its controls and results. */
+export function renderPanelDocument(step: Step, state: PanelState, nonce: string, cspSource: string): string {
+  return renderDocument(`${renderStepHtml(step)}\n${renderPanelControls(step, state)}`, nonce, cspSource);
+}
+
+/** The Reflection panel document: no Step controls. */
+export function renderReflectionDocument(lesson: Lesson, nonce: string, cspSource: string): string {
+  return renderDocument(renderReflectionHtml(lesson), nonce, cspSource);
+}
+
+/** The Track overview panel document: no Step controls. */
+export function renderTrackDocument(track: Track, nonce: string, cspSource: string): string {
+  return renderDocument(renderTrackHtml(track), nonce, cspSource);
+}
