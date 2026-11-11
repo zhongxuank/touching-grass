@@ -111,7 +111,9 @@ provider: claude
 checks: test_agent_claude.py
 habit: Small functions
 
-Now the loop. Each round it sends the whole conversation plus the tool schemas. The response has a **stop reason** that says why the model stopped. `"tool_use"` means "I want a tool run". Anything else (usually `"end_turn"`) means it finished, so we return its text. When it wants a tool, we append two messages: the assistant's reply exactly as received, then the tool-result message, and go round again. Without the assistant message the model would not remember asking.
+Now the loop. Each round it sends the whole conversation plus the tool schemas. The response has a **stop reason** that says why the model stopped. `"tool_use"` means "I want a tool run". Anything else (usually `"end_turn"`) means it finished, so we return its text. When it wants a tool, we append two messages: the assistant's reply exactly as received, then the tool-result message, and go round again. Appending `response.content` (the whole list of blocks, not just the text) is important: it carries the model's thinking blocks and its `tool_use` blocks back to it, so the model sees its own earlier reasoning and the request your tool result answers. Without it the model would not remember asking.
+
+The call uses the same two settings as Lesson 1: `effort` low and `max_tokens=1024`, because thinking tokens count toward `max_tokens`.
 
 `max_steps` stops a confused model from looping forever. The send is logged, and wrapped in `with_retries` from Lesson 1.
 
@@ -159,7 +161,8 @@ def run_agent(prompt: str, *, client=None, max_steps: int = 5) -> str:
         response = with_retries(
             lambda: client.messages.create(
                 model=MODEL,
-                max_tokens=500,
+                max_tokens=1024,
+                output_config={"effort": "low"},
                 system=SYSTEM,
                 tools=to_claude_tools(TOOL_SPECS),
                 messages=messages,

@@ -73,5 +73,5 @@ def test_ask_calls_a_real_llm():
         llm.choose_provider()
     except RuntimeError:
         pytest.skip("no API key is set")
-    answer = llm.ask("Say hi in one word.", max_tokens=20)
+    answer = llm.ask("Say hi in one word.")
     assert isinstance(answer, str) and answer.strip()

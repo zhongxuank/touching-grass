@@ -37,7 +37,8 @@ def run_agent(prompt: str, *, client=None, max_steps: int = 5) -> str:
         response = with_retries(
             lambda: client.messages.create(
                 model=MODEL,
-                max_tokens=500,
+                max_tokens=1024,
+                output_config={"effort": "low"},
                 system=SYSTEM,
                 tools=to_claude_tools(TOOL_SPECS),
                 messages=messages,

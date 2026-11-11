@@ -19,7 +19,7 @@ def ask(
     *,
     client: OpenAI | None = None,
     system: str = "You are a helpful assistant. Answer briefly.",
-    max_tokens: int = 300,
+    max_tokens: int = 1024,
 ) -> str:
     client = client or make_client()
     response = client.chat.completions.create(

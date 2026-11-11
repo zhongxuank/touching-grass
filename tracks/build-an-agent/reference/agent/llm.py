@@ -37,7 +37,7 @@ def ask(
     *,
     provider: str | None = None,
     system: str = "You are a helpful assistant. Answer briefly.",
-    max_tokens: int = 300,
+    max_tokens: int = 1024,
 ) -> str:
     name = provider or choose_provider()
     module = load_provider(name)

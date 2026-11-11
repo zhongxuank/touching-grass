@@ -45,7 +45,7 @@ A Check confirms the Learner's typed code works. It is not a quiz.
 - Check behaviour and shape: return types, keys present, side effects on a `tmp_path`. Never exact text. Use `in`, `len`, `isinstance`, `!=` before and after.
 - Keep Learner files untouched: write only to `tmp_path`.
 - **Each Step's Checks pass against the code from all Steps so far.** A Check for Step 3 must not need Step 4's code and must still pass after Step 4 changes the file.
-- Checks that call a real LLM use the cheapest model (for example `claude-haiku-4-5`, `gpt-4o-mini`, or an OpenRouter equivalent), keep max tokens small, and assert structure (a non-empty string, the tool-call shape, valid JSON), never wording. Name the Provider's Step with `provider:` so the Check is skipped without a key.
+- Checks that call a real LLM use the cheapest model (for example `claude-haiku-5-5`, `gpt-4o-mini`, or an OpenRouter equivalent), keep max tokens small (but for a thinking model such as Claude Haiku 5.5, send `output_config={"effort": "low"}` and leave `max_tokens` around 1024, since thinking tokens count toward `max_tokens` and a tiny cap can cut the answer off), and assert structure (a non-empty string, the tool-call shape, valid JSON), never wording. Name the Provider's Step with `provider:` so the Check is skipped without a key.
 
 ## 4. Verify
 

@@ -83,16 +83,16 @@ Some words you will meet in every LLM API:
 - **messages**: the conversation so far, a list of dictionaries. Each has a **role**: `"user"` for what you say and `"assistant"` for what the model said. Here we send one user message.
 - **system prompt**: instructions that set the model's behaviour for the whole conversation, such as "answer briefly". Anthropic takes it as a separate `system=` argument.
 - **max tokens**: a cap on the length of the reply. A token is roughly three quarters of a word. A small cap keeps experiments cheap.
-- **content blocks**: Anthropic's reply is not a plain string but a list of blocks. A text answer is a block with `type == "text"`. In the next Lesson, a request to use a tool will be a different kind of block.
+- **content blocks**: Anthropic's reply is not a plain string but a list of blocks. A text answer is a block with `type == "text"`; a thinking block has a different type. In the next Lesson, a request to use a tool will be a different kind of block.
 
-`claude-haiku-4-5` is Anthropic's small, cheap model, which is plenty for learning. `ask` takes an optional `client`. If you pass none it makes a real one, but a test can pass a fake object instead and never touch the network. `max_retries=0` turns off the SDK's built-in retries so that the retry code you write in a later Step is the only one.
+`claude-haiku-5-5` is Anthropic's small, cheap model, which is plenty for learning. It can **think** before it answers: it works through the problem in hidden reasoning and then writes the reply, and those thinking tokens count toward `max_tokens` along with the answer. Two settings keep that under control. `output_config={"effort": "low"}` tells the model to think only a little (effort controls how much it thinks). And `max_tokens=1024` leaves plenty of room, so a short answer is never cut off because thinking used the budget up. The reply may therefore start with a thinking block, so `response_text` keeps only blocks whose `type` is `"text"` and skips the rest. (Do not set `temperature`, `top_p`, `top_k` or `budget_tokens` for this model.) `ask` takes an optional `client`. If you pass none it makes a real one, but a test can pass a fake object instead and never touch the network. `max_retries=0` turns off the SDK's built-in retries so that the retry code you write in a later Step is the only one.
 
 ```python file=agent/llm_claude.py
 from anthropic import Anthropic
 
 from agent.config import get_key
 
-MODEL = "claude-haiku-4-5"
+MODEL = "claude-haiku-5-5"
 
 
 def make_client() -> Anthropic:
@@ -108,12 +108,13 @@ def ask(
     *,
     client: Anthropic | None = None,
     system: str = "You are a helpful assistant. Answer briefly.",
-    max_tokens: int = 300,
+    max_tokens: int = 1024,
 ) -> str:
     client = client or make_client()
     response = client.messages.create(
         model=MODEL,
         max_tokens=max_tokens,
+        output_config={"effort": "low"},
         system=system,
         messages=[{"role": "user", "content": prompt}],
     )
@@ -154,7 +155,7 @@ def ask(
     *,
     client: OpenAI | None = None,
     system: str = "You are a helpful assistant. Answer briefly.",
-    max_tokens: int = 300,
+    max_tokens: int = 1024,
 ) -> str:
     client = client or make_client()
     response = client.chat.completions.create(
@@ -197,7 +198,7 @@ def ask(
     *,
     client: OpenAI | None = None,
     system: str = "You are a helpful assistant. Answer briefly.",
-    max_tokens: int = 300,
+    max_tokens: int = 1024,
 ) -> str:
     client = client or make_client()
     response = client.chat.completions.create(
@@ -310,7 +311,7 @@ def ask(
     *,
     provider: str | None = None,
     system: str = "You are a helpful assistant. Answer briefly.",
-    max_tokens: int = 300,
+    max_tokens: int = 1024,
 ) -> str:
     name = provider or choose_provider()
     module = load_provider(name)

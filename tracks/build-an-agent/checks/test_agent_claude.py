@@ -37,6 +37,23 @@ def test_returns_text_when_no_tool_is_needed():
     assert client.messages.last["tools"]
 
 
+def test_skips_thinking_blocks_and_sends_them_back():
+    thinking = SimpleNamespace(type="thinking", thinking="plan")
+    use = SimpleNamespace(type="tool_use", id="t1", name="add", input={"a": 2, "b": 3})
+    first = SimpleNamespace(content=[thinking, use], stop_reason="tool_use")
+    final = SimpleNamespace(
+        content=[SimpleNamespace(type="thinking", thinking="ok"), SimpleNamespace(type="text", text="5")],
+        stop_reason="end_turn",
+    )
+    client = scripted([first, final])
+    assert run_agent("2+3?", client=client) == "5"
+    assistant = client.messages.sent[1][1]
+    assert assistant["role"] == "assistant"
+    assert thinking in assistant["content"] and use in assistant["content"]
+    assert client.messages.last["output_config"] == {"effort": "low"}
+    assert client.messages.last["max_tokens"] >= 1024
+
+
 def test_runs_the_tool_and_sends_the_result_back():
     client = scripted([tool_response("add", {"a": 2, "b": 3}), text_response("The sum is 5")])
     answer = run_agent("what is 2+3?", client=client)
