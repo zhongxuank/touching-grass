@@ -1,0 +1,57 @@
+{
+  "name": "touching-grass",
+  "displayName": "touching grass",
+  "description": "Walks a Learner through building real things by hand, one Step at a time.",
+  "version": "0.0.1",
+  "private": true,
+  "license": "UNLICENSED",
+  "publisher": "touching-grass",
+  "engines": { "vscode": "^1.90.0" },
+  "categories": ["Education"],
+  "main": "./dist/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "commands": [
+      { "command": "touchingGrass.openTrack", "title": "Open Track", "category": "Touching Grass" }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        { "id": "touchingGrass", "title": "Touching Grass", "icon": "media/grass.svg" }
+      ]
+    },
+    "views": {
+      "touchingGrass": [
+        { "id": "touchingGrass.track", "name": "Track" }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "touchingGrass.track",
+        "contents": "No Track open.\n[Open Track](command:touchingGrass.openTrack)"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:smoke": "npm run build && vscode-test",
+    "watch": "node esbuild.mjs --watch"
+  },
+  "dependencies": {
+    "markdown-it": "^14.1.0",
+    "yaml": "^2.5.0"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.1.2",
+    "@types/mocha": "^10.0.7",
+    "@types/node": "^20.14.0",
+    "@types/vscode": "^1.90.0",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.4.1",
+    "esbuild": "^0.23.0",
+    "mocha": "^10.7.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.5"
+  }
+}
