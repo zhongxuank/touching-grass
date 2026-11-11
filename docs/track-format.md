@@ -111,15 +111,37 @@ loadTrack(folder: string): Promise<LoadTrackResult>
 interface TrackSession {
   readonly track: Track;                      // Track > Lesson > Step structure
   getStep(stepId: string): Step | undefined;
-  setWorkspace(folder: string): void;        // the Learner's agent workspace, where Checks run
+  setWorkspace(folder: string): void;        // the Learner's agent workspace, where Checks run (no progress read)
+  openWorkspace(folder: string): Promise<{ notice?: string }>; // set the workspace and load its progress file
   runChecks(stepId: string): Promise<RunChecksOutcome>;
   markDone(stepId: string): boolean;         // only for Steps with no Checks
   isDone(stepId: string): boolean;
   advance(stepId: string): Step | undefined; // next Step, across Lessons, once this one is done
-  getProgress(): Progress;                   // { doneSteps: string[] }, in memory for now
+  getCurrentStep(): string | undefined;      // the Step the Learner is on; the first Step if none yet
+  openStep(stepId: string): Step | undefined; // open in the panel; an unfinished Step becomes current
+  getProgress(): Progress;                   // { doneSteps: string[], currentStep?: string }
+  flush(): Promise<string | undefined>;      // wait for saves; a message if one failed
 }
 ```
 
 `loadTrack(folder, { checkRunner })` takes an optional Check runner; tests inject a fake.
+
+## Progress file
+
+Progress lives in the Learner's agent workspace at `.touching-grass/progress.json`, so it is committed with their code. It is saved on every change (a Step done, the current Step moved).
+
+```json
+{
+  "version": 1,
+  "trackTitle": "Build an AI agent from scratch",
+  "doneSteps": ["01-call-an-llm/1", "01-call-an-llm/2"],
+  "currentStep": "01-call-an-llm/3"
+}
+```
+
+- `trackTitle` identifies the Track. A file for another Track is ignored and copied to `progress.json.bak`.
+- A file that is not valid (bad JSON, unknown `version`, wrong field types) is copied to `progress.json.bak` and progress starts fresh.
+- Step ids that no longer exist in the Track are dropped on load.
+- New fields (for example `chosenProvider`) are added to `ProgressFile` in `src/engine/progress.ts`.
 
 The engine has no `vscode` import. The extension in `src/extension.ts` is a thin shell over it.

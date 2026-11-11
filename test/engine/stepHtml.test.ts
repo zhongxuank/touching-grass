@@ -138,4 +138,13 @@ describe("Step panel", () => {
     expect(html).toContain('data-action="markDone"');
     expect(html).not.toContain("Run Checks");
   });
+
+  it("hides Run Checks and Mark done on a read-only done Step, but keeps Next Step", () => {
+    const withChecksHtml = renderPanelControls(withChecks, { done: true, hasNext: true, readOnly: true });
+    expect(withChecksHtml).not.toContain("Run Checks");
+    expect(withChecksHtml).toContain('data-action="next"');
+    const noChecksHtml = renderPanelControls(step, { done: true, hasNext: true, readOnly: true });
+    expect(noChecksHtml).not.toContain("markDone");
+    expect(noChecksHtml).toContain('data-action="next"');
+  });
 });
