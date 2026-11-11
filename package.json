@@ -12,7 +12,8 @@
   "activationEvents": [],
   "contributes": {
     "commands": [
-      { "command": "touchingGrass.openTrack", "title": "Open Track", "category": "Touching Grass" }
+      { "command": "touchingGrass.openTrack", "title": "Open Track", "category": "Touching Grass" },
+      { "command": "touchingGrass.validateTrack", "title": "Validate Track", "category": "Touching Grass" }
     ],
     "viewsContainers": {
       "activitybar": [
@@ -36,6 +37,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:smoke": "npm run build && vscode-test",
+    "validate-track": "node dist/validate.js",
     "watch": "node esbuild.mjs --watch"
   },
   "dependencies": {
