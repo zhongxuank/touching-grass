@@ -54,6 +54,10 @@ export interface PanelState {
   noKeyProvider?: string;
 }
 
+/** Opens Claude Code in the agent workspace as the Tutor. Shown on every Step. */
+const TUTOR_BUTTON =
+  '<section class="tutor"><button class="secondary" data-action="askTutor">Ask Claude about this Step</button></section>';
+
 /** Controls and results below the Step: Run Checks (or Mark done), results, Next Step. */
 export function renderPanelControls(step: Step, state: PanelState): string {
   const parts: string[] = [];
@@ -61,6 +65,7 @@ export function renderPanelControls(step: Step, state: PanelState): string {
     parts.push(
       `<p class="notice">No key for ${escape(state.noKeyProvider)}. Read along, your Checks are skipped.</p>`,
       state.hasNext ? '<button data-action="next">Next Step</button>' : "<p>That was the last Step.</p>",
+      TUTOR_BUTTON,
     );
     return parts.join("\n");
   }
@@ -85,6 +90,7 @@ export function renderPanelControls(step: Step, state: PanelState): string {
       `<p class="pass">Step done.</p>${state.hasNext ? '<button data-action="next">Next Step</button>' : "<p>That was the last Step.</p>"}`,
     );
   }
+  parts.push(TUTOR_BUTTON);
   return parts.join("\n");
 }
 
@@ -102,6 +108,7 @@ export function renderDocument(body: string, nonce: string, cspSource: string): 
   button.link { background: none; border: none; color: var(--vscode-textLink-foreground); cursor: pointer; padding: 0; }
   .output { white-space: pre-wrap; }
   .habit-callout { border-left: 3px solid var(--vscode-textLink-foreground); padding: 0.25rem 0.75rem; margin: 1rem 0; }
+  .tutor { margin-top: 1.5rem; padding-top: 0.75rem; border-top: 1px solid var(--vscode-panel-border, #8884); }
   .reflection-note { opacity: 0.8; font-style: italic; }
 </style></head><body>${body}
 <script nonce="${nonce}">

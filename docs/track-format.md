@@ -167,3 +167,11 @@ Progress lives in the Learner's agent workspace at `.touching-grass/progress.jso
 - New fields are added to `ProgressFile` in `src/engine/progress.ts`.
 
 The engine has no `vscode` import. The extension in `src/extension.ts` is a thin shell over it.
+
+## Tutor files
+
+When the Learner chooses an agent workspace, the extension also writes files for the Tutor (Claude Code) into it. None of them change how a Track is written.
+
+- `.touching-grass/tutor.md`: how the Tutor should help, the Track's title and folder. Rewritten each time a workspace is chosen.
+- `.touching-grass/current-step.md`: the open Step (explanation, Code Chunk, target file, Checks) and the last Check results. Rewritten when a Step opens or its Checks run.
+- `CLAUDE.md` at the workspace root gets the line `@.touching-grass/tutor.md`, so Claude Code loads the guide. The file is created if missing; otherwise only that line is appended, once.

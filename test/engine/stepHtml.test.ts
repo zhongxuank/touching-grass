@@ -117,6 +117,16 @@ describe("Step panel", () => {
     expect(html).not.toContain("Next Step");
   });
 
+  it("offers Ask Claude on every Step, including read-only and keyless ones", () => {
+    for (const state of [
+      { done: false, hasNext: true },
+      { done: true, hasNext: true, readOnly: true },
+      { done: false, hasNext: true, noKeyProvider: "openai" },
+    ]) {
+      expect(renderPanelControls(withChecks, state)).toContain('data-action="askTutor"');
+    }
+  });
+
   it("offers Next Step once the Step is done", () => {
     expect(renderPanelControls(withChecks, { done: true, hasNext: true })).toContain('data-action="next"');
   });

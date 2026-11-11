@@ -1,5 +1,13 @@
 import * as vscode from "vscode";
-import { formatValidationError, loadTrack, type Step, type TrackSession } from "./engine";
+import {
+  formatValidationError,
+  loadTrack,
+  TUTOR_PROMPT,
+  writeCurrentStep,
+  writeTutorGuide,
+  type Step,
+  type TrackSession,
+} from "./engine";
 import { randomBytes } from "node:crypto";
 import { showValidationErrors } from "./diagnostics";
 import { registerPasteNudge } from "./pasteNudge";
@@ -17,6 +25,29 @@ export function activate(context: vscode.ExtensionContext): void {
   let message: string | undefined;
   /** The Learner's agent workspace. Kept across Tracks, so a Track opened later resumes in it. */
   let workspace: string | undefined;
+  /** The open Track's folder, named in the Tutor guide. */
+  let trackFolder: string | undefined;
+  /** The terminal running Claude Code as the Tutor, reused while it is open. */
+  let tutorTerminal: vscode.Terminal | undefined;
+
+  /** Keep the Tutor's copy of the current Step up to date. Silent unless writing fails. */
+  const syncCurrentStep = async () => {
+    const folder = session?.getWorkspace();
+    if (!folder || !current) return;
+    const error = await writeCurrentStep(folder, current, results);
+    if (error) void vscode.window.showWarningMessage(error);
+  };
+
+  /** Open Claude Code in the agent workspace, asking about the current Step. */
+  const askTutor = () => {
+    const folder = session?.getWorkspace();
+    if (!folder) return;
+    if (!tutorTerminal || tutorTerminal.exitStatus !== undefined) {
+      tutorTerminal = vscode.window.createTerminal({ name: "Claude tutor", cwd: folder });
+      tutorTerminal.sendText(`claude "${TUTOR_PROMPT}"`);
+    }
+    tutorTerminal.show();
+  };
 
   /** Wait for progress to reach the workspace, and say so if it could not be saved. */
   const saveProgress = async () => {
@@ -30,8 +61,13 @@ export function activate(context: vscode.ExtensionContext): void {
     workspace = folder;
     const { notice } = await session.openWorkspace(folder);
     if (notice) void vscode.window.showWarningMessage(notice);
+    if (trackFolder) {
+      const error = await writeTutorGuide(folder, { trackTitle: session.track.title, trackFolder });
+      if (error) void vscode.window.showWarningMessage(error);
+    }
     tree.refresh();
     await saveProgress();
+    await syncCurrentStep();
   };
 
   const pickWorkspace = async (): Promise<string | undefined> => {
@@ -60,6 +96,7 @@ export function activate(context: vscode.ExtensionContext): void {
       message = outcome.status === "tooling-missing" ? outcome.message : undefined;
       tree.refresh();
       await saveProgress();
+      await syncCurrentStep();
       render();
     } else if (msg.action === "markDone") {
       session.markDone(step.id);
@@ -72,6 +109,13 @@ export function activate(context: vscode.ExtensionContext): void {
       tree.refresh();
       if (next) openStepById(next.id);
       else if (session.providerChoiceNeeded()) await askProviderChoice();
+    } else if (msg.action === "askTutor") {
+      if (!session.getWorkspace() && !(await pickWorkspace())) {
+        message = "Choose your agent workspace to ask Claude.";
+        return render();
+      }
+      await syncCurrentStep();
+      askTutor();
     } else if (msg.action === "openCheck" && msg.check && step.checks.includes(msg.check)) {
       await vscode.window.showTextDocument(vscode.Uri.file(session.checkFilePath(msg.check)), {
         viewColumn: vscode.ViewColumn.One,
@@ -131,6 +175,7 @@ export function activate(context: vscode.ExtensionContext): void {
     results = undefined;
     message = undefined;
     render();
+    void syncCurrentStep();
   };
 
   /** Open a Step in the panel. The engine moves the current Step only for an unfinished Step. */
@@ -157,6 +202,9 @@ export function activate(context: vscode.ExtensionContext): void {
   };
 
   context.subscriptions.push(
+    vscode.window.onDidCloseTerminal((t) => {
+      if (t === tutorTerminal) tutorTerminal = undefined;
+    }),
     vscode.window.registerTreeDataProvider("touchingGrass.track", tree),
     registerPasteNudge(() => current),
     vscode.commands.registerCommand("touchingGrass.openTrack", async (folder?: vscode.Uri) => {
@@ -178,6 +226,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
       const opened = result.session;
       session = opened;
+      trackFolder = uri.fsPath;
       current = undefined;
       tree.setTrack(
         opened.track,
