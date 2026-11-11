@@ -18,6 +18,7 @@ export type {
   ValidationError,
 } from "./types";
 export { createCheckRunner } from "./checkRunner";
+export { looksLikePastedChunk, PASTE_MATCH_RATIO, PASTE_MIN_LINES } from "./paste";
 
 /** A loaded Track. Later tickets hang progress, Provider choice and Check results here. */
 export interface TrackSession {

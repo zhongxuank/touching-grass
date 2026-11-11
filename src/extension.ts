@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { formatValidationError, loadTrack, type Step, type TrackSession } from "./engine";
 import { randomBytes } from "node:crypto";
+import { registerPasteNudge } from "./pasteNudge";
 import { renderPanelDocument, type PanelState } from "./stepHtml";
 import { TrackTree } from "./trackTree";
 
@@ -80,6 +81,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     vscode.window.registerTreeDataProvider("touchingGrass.track", tree),
+    registerPasteNudge(() => current),
     vscode.commands.registerCommand("touchingGrass.openTrack", async (folder?: vscode.Uri) => {
       const uri =
         folder ??

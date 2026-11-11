@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { delimiter } from "node:path";
 import type { CheckResult, CheckRunOutcome, CheckRunner, CheckRunRequest } from "./types";
 
 export interface CheckRunnerOptions {
@@ -38,7 +39,7 @@ export function createCheckRunner(options: CheckRunnerOptions = {}): CheckRunner
       const env: NodeJS.ProcessEnv = {
         ...process.env,
         ...options.env,
-        PYTHONPATH: [workspace, process.env.PYTHONPATH].filter(Boolean).join(":"),
+        PYTHONPATH: [workspace, process.env.PYTHONPATH].filter(Boolean).join(delimiter),
         PYTHONDONTWRITEBYTECODE: "1",
       };
       const results: CheckResult[] = [];
