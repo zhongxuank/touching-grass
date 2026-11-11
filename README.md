@@ -19,7 +19,27 @@ Check them in a new terminal: `code --version`, `node --version`, `uv --version`
 
 ### 2. Get one API key
 
-You need a key for one Provider, not all three: [Anthropic (Claude)](https://console.anthropic.com/settings/keys), [OpenAI](https://platform.openai.com/api-keys) or [OpenRouter](https://openrouter.ai/keys). Keep it somewhere safe for now. Lesson 1 shows you where it goes (a `.env` file in your agent folder that git ignores). Steps for the Providers you have no key for are read-only, and their Checks are skipped.
+You need a key for one Provider, not all three. Steps for the Providers you have no key for are read-only, and their Checks are skipped. Lesson 1 shows you where the key goes: a `.env` file in your agent folder that git ignores.
+
+| Provider | Cost for this Track | Notes |
+| --- | --- | --- |
+| [Anthropic (Claude)](https://console.anthropic.com/settings/keys) | A few cents. Claude Haiku 5.5 is $0.10 / $0.50 per million input / output tokens, roughly $0.0004 a call here, so $1 covers about 2,000 calls | Recommended. The Track's default for Claude |
+| [OpenAI](https://platform.openai.com/api-keys) | A few cents with `gpt-4o-mini` | |
+| [OpenRouter](https://openrouter.ai/keys), paid | A few cents with the default `openai/gpt-4o-mini` | One key for many models |
+| [OpenRouter](https://openrouter.ai/keys), free | $0 | See below |
+
+The whole Track makes roughly 50 to 150 calls, so the smallest top-up a Provider allows is plenty. These numbers are estimates from November 2026, so check the Provider's pricing page.
+
+Keep it safe: create a key just for this, set a monthly spend limit in the Provider's console, never commit `.env`, and revoke the key when you are done.
+
+**Free with OpenRouter.** OpenRouter has free models, with ids ending in `:free`. Put one in your agent folder's `.env`:
+
+```sh
+OPENROUTER_API_KEY=sk-or-...
+OPENROUTER_MODEL=nvidia/nemotron-3.5-super-vl:free
+```
+
+Pick a free model that supports tool calling (filter by "Tools" on [openrouter.ai/models](https://openrouter.ai/models?max_price=0)), or Lesson 2's agent will not work. Free models allow 20 requests a minute and 50 a day (1,000 a day once you have bought $10 of credits), may be slower or less reliable, and can be withdrawn. Their providers may log prompts, so send nothing private. If a Check that calls the real API fails, try again or switch `OPENROUTER_MODEL` back to empty to use the paid default.
 
 ### 3. Build and launch the extension
 

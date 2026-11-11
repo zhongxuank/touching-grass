@@ -38,7 +38,7 @@ __pycache__/
 
 ## Step: List the keys in .env.example
 
-`.env.example` is a template you commit: it names the settings the project needs, with empty values. Copy it to `.env` (`cp .env.example .env`) and paste in the key for one Provider. `.env` stays private because the previous Step ignored it, while `.env.example` shows anyone who clones the project what to fill in. `LLM_PROVIDER` is optional: when you have several keys, it says which Provider to use.
+`.env.example` is a template you commit: it names the settings the project needs, with empty values. Copy it to `.env` (`cp .env.example .env`) and paste in the key for one Provider. `.env` stays private because the previous Step ignored it, while `.env.example` shows anyone who clones the project what to fill in. `LLM_PROVIDER` is optional: when you have several keys, it says which Provider to use. `OPENROUTER_MODEL` is optional too, and only matters for OpenRouter (see its Step).
 
 ```text file=.env.example
 ANTHROPIC_API_KEY=
@@ -46,6 +46,8 @@ OPENAI_API_KEY=
 OPENROUTER_API_KEY=
 # Optional: claude, openai or openrouter. Defaults to the first key found.
 LLM_PROVIDER=
+# Optional: an OpenRouter model id, e.g. a free one ending in :free. Defaults to openai/gpt-4o-mini.
+OPENROUTER_MODEL=
 ```
 
 ## Step: Read keys from .env
@@ -176,12 +178,18 @@ checks: test_llm_openrouter.py
 
 OpenRouter is one account that routes to many models. It copies OpenAI's API on purpose, so you use the `openai` SDK and change only two things: the `base_url`, which says where to send requests, and the model name, which now includes the maker, like `openai/gpt-4o-mini`. Everything else is the same as the OpenAI Step. The file is separate so that a Learner with only an OpenRouter key has everything they need.
 
+The model is a setting, not a constant: `load_env()` reads `.env` first, then `MODEL` takes `OPENROUTER_MODEL` from it, falling back to `DEFAULT_MODEL`. That lets you switch to one of OpenRouter's free models (ids ending in `:free`) without touching code. Free models are rate-limited and less reliable, so the default stays a cheap paid one. `or DEFAULT_MODEL` also covers the setting being present but empty, which `os.environ.get`'s default alone would not.
+
 ```python file=agent/llm_openrouter.py
+import os
+
 from openai import OpenAI
 
-from agent.config import get_key
+from agent.config import get_key, load_env
 
-MODEL = "openai/gpt-4o-mini"
+DEFAULT_MODEL = "openai/gpt-4o-mini"
+load_env()
+MODEL = os.environ.get("OPENROUTER_MODEL", "").strip() or DEFAULT_MODEL
 BASE_URL = "https://openrouter.ai/api/v1"
 
 

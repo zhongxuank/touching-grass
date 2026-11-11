@@ -42,3 +42,18 @@ def test_ask_calls_the_real_api():
         pytest.skip("OPENROUTER_API_KEY is not set")
     answer = ask("Say hi in one word.", max_tokens=20)
     assert isinstance(answer, str) and answer.strip()
+
+
+def test_the_model_comes_from_openrouter_model_in_env(monkeypatch):
+    import importlib
+
+    from agent import llm_openrouter
+
+    try:
+        monkeypatch.setenv("OPENROUTER_MODEL", "some-maker/some-model:free")
+        assert importlib.reload(llm_openrouter).MODEL == "some-maker/some-model:free"
+        monkeypatch.setenv("OPENROUTER_MODEL", "")
+        assert importlib.reload(llm_openrouter).MODEL == llm_openrouter.DEFAULT_MODEL
+    finally:
+        monkeypatch.undo()
+        importlib.reload(llm_openrouter)

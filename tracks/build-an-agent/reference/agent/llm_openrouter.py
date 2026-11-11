@@ -1,8 +1,12 @@
+import os
+
 from openai import OpenAI
 
-from agent.config import get_key
+from agent.config import get_key, load_env
 
-MODEL = "openai/gpt-4o-mini"
+DEFAULT_MODEL = "openai/gpt-4o-mini"
+load_env()
+MODEL = os.environ.get("OPENROUTER_MODEL", "").strip() or DEFAULT_MODEL
 BASE_URL = "https://openrouter.ai/api/v1"
 
 
