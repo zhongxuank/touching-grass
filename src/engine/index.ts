@@ -3,7 +3,7 @@ import * as path from "node:path";
 import { checkLessonFileList, parseLessonFile, parseTrackFile } from "./parse";
 import { createCheckRunner } from "./checkRunner";
 import { isProvider, providersWithKeys, readEnvFile, type EnvReader, type Provider } from "./providers";
-import type { CheckRunner, Lesson, Progress, RunChecksOutcome, Step, Track, ValidationError } from "./types";
+import type { CheckRunner, Lesson, Page, Progress, RunChecksOutcome, Step, Track, ValidationError } from "./types";
 
 export type {
   CheckResult,
@@ -12,6 +12,7 @@ export type {
   CheckRunner,
   CodeChunk,
   Lesson,
+  Page,
   Progress,
   RunChecksOutcome,
   Step,
@@ -103,6 +104,29 @@ export interface TrackSession {
   isDone(stepId: string): boolean;
   /** The Step after this one, crossing into the next Lesson, only once this one is done. */
   advance(stepId: string): Step | undefined;
+  /**
+   * The pages the Learner moves through, in order: each Lesson's visible Steps, then its Reflection if it has
+   * questions. Hidden Provider Steps are not pages.
+   */
+  getPages(): Page[];
+  /** Stable id of a page: the Step id, or `<lesson id>/reflection`. */
+  pageId(page: Page): string;
+  /** `<lesson number>.<step number>` among the Lesson's visible Steps (e.g. "1.3"), or "Reflection". Undefined for a hidden or unknown page. */
+  pageNumber(pageId: string): string | undefined;
+  /** The page before this one. Always allowed. */
+  previousPage(pageId: string): Page | undefined;
+  /**
+   * The page after this one. From a Step it needs the Step done, as `advance` does, and a Provider Step with no
+   * key counts as passed by skip. Leaving the first Provider Lesson without a chosen Provider holds the move:
+   * see `providerChoiceNeeded`. A Reflection needs nothing done.
+   */
+  nextPage(pageId: string): Page | undefined;
+  /** Whether `nextPage` is open to the Learner now: the Step is done or skippable, or it is a Reflection. */
+  canGoNext(pageId: string): boolean;
+  /** Whether any page follows this one, whether or not the Learner may go there yet. */
+  hasNextPage(pageId: string): boolean;
+  /** Done and total visible Steps, for the whole Track or one Lesson. */
+  progressCount(lessonId?: string): { done: number; total: number };
   /** Absolute path of a Check file in the Track folder. */
   checkFilePath(name: string): string;
   /** Progress as plain data, ready to be saved. */
@@ -207,6 +231,13 @@ export async function loadTrack(folder: string, options: LoadTrackOptions = {}):
   const firstProviderLesson = lessons.findIndex((l) => l.steps.some((s) => s.provider));
   const visible = (s: Step) =>
     !chosen || !s.provider || s.provider === chosen || lessonOf.get(s.id)! <= firstProviderLesson;
+  const pageIdOf = (p: Page) => (p.kind === "step" ? p.step.id : `${p.lesson.id}/reflection`);
+  const pageLesson = (p: Page) => (p.kind === "step" ? lessonOf.get(p.step.id)! : lessons.indexOf(p.lesson));
+  const pages = (): Page[] =>
+    lessons.flatMap((lesson): Page[] => [
+      ...lesson.steps.filter(visible).map((step): Page => ({ kind: "step", step })),
+      ...(lesson.reflection.length ? [{ kind: "reflection", lesson } as Page] : []),
+    ]);
   const detect = async (): Promise<Provider[]> => {
     dotEnv = workspace ? await readEnv(workspace) : {};
     available = providersWithKeys(dotEnv, processEnv);
@@ -364,6 +395,56 @@ export async function loadTrack(folder: string, options: LoadTrackOptions = {}):
         return undefined;
       }
       return next;
+    },
+    getPages: pages,
+    pageId: pageIdOf,
+    pageNumber(id) {
+      const page = pages().find((p) => pageIdOf(p) === id);
+      if (!page) return undefined;
+      if (page.kind === "reflection") return "Reflection";
+      const lesson = lessonOf.get(page.step.id)!;
+      return `${lesson + 1}.${lessons[lesson]!.steps.filter(visible).indexOf(page.step) + 1}`;
+    },
+    previousPage(id) {
+      const list = pages();
+      return list[list.findIndex((p) => pageIdOf(p) === id) - 1];
+    },
+    nextPage(id) {
+      const list = pages();
+      const at = list.findIndex((p) => pageIdOf(p) === id);
+      const page = list[at];
+      if (!page) return undefined;
+      if (page.kind === "step" && !done.has(id)) {
+        // A Provider Step with no key is read-only: moving on counts it as done by skip.
+        if (!missing(page.step)) return undefined;
+        done.add(id);
+        skipped.add(id);
+        persist();
+      }
+      held = undefined;
+      const next = list[at + 1];
+      if (!next) return undefined;
+      const from = pageLesson(page);
+      const to = pageLesson(next);
+      if (!chosen && available.length > 0 && from === firstProviderLesson && to > firstProviderLesson) {
+        held = lessons[to]!.steps.find(visible);
+        if (held) return undefined;
+      }
+      return next;
+    },
+    canGoNext: (id) => {
+      const page = pages().find((p) => pageIdOf(p) === id);
+      if (!page) return false;
+      return page.kind === "reflection" || done.has(id) || !!missing(page.step);
+    },
+    hasNextPage(id) {
+      const list = pages();
+      const at = list.findIndex((p) => pageIdOf(p) === id);
+      return at >= 0 && at + 1 < list.length;
+    },
+    progressCount(lessonId) {
+      const shown = (lessonId ? lessons.filter((l) => l.id === lessonId) : lessons).flatMap((l) => l.steps).filter(visible);
+      return { done: shown.filter((s) => done.has(s.id)).length, total: shown.length };
     },
     checkFilePath,
     getProgress: () => ({ doneSteps: order.filter((s) => done.has(s.id)).map((s) => s.id), currentStep: current }),

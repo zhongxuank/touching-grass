@@ -5,6 +5,8 @@ import {
   TUTOR_PROMPT,
   writeCurrentStep,
   writeTutorGuide,
+  type Lesson,
+  type Page,
   type Step,
   type TrackSession,
 } from "./engine";
@@ -13,7 +15,14 @@ import { promises as fs } from "node:fs";
 import * as path from "node:path";
 import { showValidationErrors } from "./diagnostics";
 import { registerPasteNudge } from "./pasteNudge";
-import { renderPanelDocument, renderReflectionDocument, renderTrackDocument, type PanelState } from "./stepHtml";
+import {
+  pageNav,
+  pageTitle,
+  renderPanelDocument,
+  renderReflectionDocument,
+  renderTrackDocument,
+  type PanelState,
+} from "./stepHtml";
 import { TrackTree } from "./trackTree";
 import { parseTutorOpenMode, routeTutor, type ContributedCommand } from "./tutorLaunch";
 
@@ -31,11 +40,14 @@ const windowFolder = () => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 
 export function activate(context: vscode.ExtensionContext): void {
   const tree = new TrackTree();
+  const treeView = vscode.window.createTreeView("touchingGrass.track", { treeDataProvider: tree });
   let session: TrackSession | undefined;
   let panel: vscode.WebviewPanel | undefined;
   const problems = vscode.languages.createDiagnosticCollection("touching-grass");
 
   let current: Step | undefined;
+  /** Id of the page in the panel: a Step, or a Reflection. Undefined on the Track overview. */
+  let shownPage: string | undefined;
   let results: PanelState["results"];
   let message: string | undefined;
   let ranAt: Date | undefined;
@@ -161,8 +173,28 @@ export function activate(context: vscode.ExtensionContext): void {
     return picked?.fsPath;
   };
 
+  /** Open any page of the Track's sequence. */
+  const openPage = (page: Page) => {
+    if (page.kind === "step") openStepById(page.step.id);
+    else showReflection(page.lesson);
+  };
+
   const onPanelMessage = async (msg: { action: string; check?: string }) => {
-    if (!session || !current) return;
+    if (!session) return;
+    if (msg.action === "previous" && shownPage) {
+      const page = session.previousPage(shownPage);
+      if (page) openPage(page);
+      return;
+    }
+    if (msg.action === "next" && shownPage) {
+      await session.detectProviders();
+      const page = session.nextPage(shownPage);
+      tree.refresh();
+      if (page) openPage(page);
+      else if (session.providerChoiceNeeded()) await askProviderChoice();
+      return;
+    }
+    if (!current) return;
     const step = current;
     if (msg.action === "runChecks") {
       if (running) return;
@@ -199,12 +231,6 @@ export function activate(context: vscode.ExtensionContext): void {
       tree.refresh();
       await saveProgress();
       render();
-    } else if (msg.action === "next") {
-      await session.detectProviders();
-      const next = session.advance(step.id);
-      tree.refresh();
-      if (next) openStepById(next.id);
-      else if (session.providerChoiceNeeded()) await askProviderChoice();
     } else if (msg.action === "askTutor") {
       if (!session.getWorkspace() && !(await pickWorkspace())) {
         message = "Choose your agent workspace to ask Claude.";
@@ -257,18 +283,29 @@ export function activate(context: vscode.ExtensionContext): void {
     const step = current;
     const state: PanelState = {
       done: session.isDone(step.id),
-      hasNext: session.advance(step.id) !== undefined,
+      nav: pageNav(session, step.id),
       results,
       message,
       running,
       ranAt,
       noKeyProvider: session.missingProvider(step.id),
     };
-    showDocument(step.title, (nonce, cspSource) => renderPanelDocument(step, state, nonce, cspSource));
+    showDocument(pageTitle(session, step.id) ?? step.title, (nonce, cspSource) => renderPanelDocument(step, state, nonce, cspSource));
+  };
+
+  /** Show which page is open: in the sidebar tree, and for the Previous/Next buttons. */
+  const markOpen = (pageId: string | undefined) => {
+    shownPage = pageId;
+    tree.setOpenPage(pageId);
+    const node = pageId ? tree.nodeFor(pageId) : undefined;
+    if (node && treeView.visible) {
+      void Promise.resolve(treeView.reveal(node, { select: true, focus: false })).catch(() => {});
+    }
   };
 
   const showStep = (step: Step) => {
     current = step;
+    markOpen(step.id);
     results = undefined;
     ranAt = undefined;
     message = undefined;
@@ -294,9 +331,18 @@ export function activate(context: vscode.ExtensionContext): void {
   };
 
   /** Reflection and overview panels have no Step controls, so no Step is current while they show. */
-  const showOverview = (title: string, document: (nonce: string, cspSource: string) => string) => {
+  const showOverview = (title: string, document: (nonce: string, cspSource: string) => string, pageId?: string) => {
     current = undefined;
+    markOpen(pageId);
     showDocument(title, document);
+  };
+
+  const showReflection = (lesson: Lesson) => {
+    if (!session) return;
+    const id = `${lesson.id}/reflection`;
+    const nav = pageNav(session, id);
+    const title = pageTitle(session, id) ?? `Reflection: ${lesson.title}`;
+    showOverview(title, (n, c) => renderReflectionDocument(lesson, n, c, nav), id);
   };
 
   /** Track folders shipped inside the extension, under `tracks/`. */
@@ -350,11 +396,8 @@ export function activate(context: vscode.ExtensionContext): void {
     session = opened;
     trackFolder = folder;
     current = undefined;
-    tree.setTrack(
-      opened.track,
-      (id) => opened.isDone(id),
-      (id) => opened.isVisible(id),
-    );
+    shownPage = undefined;
+    tree.setSession(opened);
     const here = windowFolder();
     const map = context.globalState.get<Record<string, string>>(TRACK_BY_WORKSPACE, {});
     const target = workspace ?? (here && map[here] === folder ? here : undefined);
@@ -379,7 +422,7 @@ export function activate(context: vscode.ExtensionContext): void {
       if (t === tutorTerminal) tutorTerminal = undefined;
       if (t === runTerminal) runTerminal = undefined;
     }),
-    vscode.window.registerTreeDataProvider("touchingGrass.track", tree),
+    treeView,
     registerPasteNudge(() => current),
     vscode.commands.registerCommand("touchingGrass.openTrack", async (folder?: vscode.Uri) => {
       const picked = folder?.fsPath ?? (await pickTrack());
@@ -397,7 +440,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("touchingGrass.openStep", (stepId: string) => openStepById(stepId)?.title),
     vscode.commands.registerCommand("touchingGrass.openReflection", (lessonId: string) => {
       const lesson = session?.track.lessons.find((l) => l.id === lessonId);
-      if (lesson) showOverview(`Reflection: ${lesson.title}`, (n, c) => renderReflectionDocument(lesson, n, c));
+      if (lesson) showReflection(lesson);
       return lesson?.title;
     }),
     vscode.commands.registerCommand("touchingGrass.openTrackOverview", () => {
