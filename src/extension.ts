@@ -61,6 +61,17 @@ export function activate(context: vscode.ExtensionContext): void {
    * Ask Claude about the current Step: copy the question to the Claude Code extension's chat, or run Claude Code
    * in a terminal, as the touchingGrass.tutor.open setting says.
    */
+  /** Copy the question and run the Claude Code extension's open command. False when the command fails. */
+  const openClaudeExtension = async (command: string): Promise<boolean> => {
+    try {
+      await vscode.env.clipboard.writeText(TUTOR_PROMPT);
+      await vscode.commands.executeCommand(command);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   const askTutor = async () => {
     const folder = session?.getWorkspace();
     if (!folder) return;
@@ -70,9 +81,7 @@ export function activate(context: vscode.ExtensionContext): void {
     const route = routeTutor(mode, claudeCommands);
     if (route.kind === "error") {
       void vscode.window.showErrorMessage(route.message);
-    } else if (route.kind === "extension") {
-      await vscode.env.clipboard.writeText(TUTOR_PROMPT);
-      await vscode.commands.executeCommand(route.command);
+    } else if (route.kind === "extension" && (await openClaudeExtension(route.command))) {
       void vscode.window.showInformationMessage("Question copied. Paste it into Claude.");
     } else {
       if (!tutorTerminal || tutorTerminal.exitStatus !== undefined || tutorFolder !== folder) {
