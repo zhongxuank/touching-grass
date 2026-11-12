@@ -20,11 +20,14 @@ Plan before writing a file, and show the Learner the outline (Lessons, Step titl
 - A Step that writes to a file an earlier Step created needs a `place:` line saying where the code goes. Its Code Chunk is the whole new file (the reference solution relies on this), so write `place: Replace the whole file.` and name what stays and what is new, for example `place: Replace the whole file. `add_task` stays as it was, `complete_task` is new`. The validator fails an edit Step with no `place:`.
 - Pick 3 to 5 Habits for the Track. Tag a Step with `habit:` where its Code Chunk models one (the name matches `habits` exactly).
 - Every Lesson ends with a Step that has a `run:` line (for example `run: uv run python main.py`), so the Learner runs their code and sees it work. Add a small entry-point file for it if the Lesson has none.
+- **Git.** Every Track teaches git in its first Lesson's setup, and every Lesson ends with a commit suggestion. Put the commit in the explanation of that last `run:` Step, before its Code Chunk, as one line with the exact command: `git add -A && git commit -m "Lesson N: <title>"`. Say that `.env` stays out because it is ignored, and that pushing to a private GitHub repo is optional. Name a Habit for it (for example "Commit after each Lesson") and tag those Steps with `habit:`. A commit is not a Code Chunk, so never give it a Step of its own.
 - Every Lesson ends with a Reflection of 1 or 2 "why" questions.
 
 ### Setup Steps (Python)
 
 The first Lesson opens with Steps that make the workspace a uv project: `pyproject.toml` (with pytest settings so imports resolve), a `.gitignore` that ignores `.env`, and, when the Track uses an API key, a `.env.example` listing the key names with empty values. The explanation says why secrets stay out of the repository.
+
+Only the first Track's setup runs `git init`; later Tracks build on the same folder. Put it on the `.gitignore` Step (its explanation says what git records, and its `run: git init` starts the repository), because a Step needs a Code Chunk and `git init` writes no file of its own. Then the `.gitignore` Step explains why `.env` never enters git.
 
 ### Providers
 
