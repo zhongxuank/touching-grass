@@ -37,6 +37,9 @@ export function activate(context: vscode.ExtensionContext): void {
   let current: Step | undefined;
   let results: PanelState["results"];
   let message: string | undefined;
+  let ranAt: Date | undefined;
+  /** Guard: a second Run Checks click while Checks run is ignored. */
+  let running = false;
   /** The Learner's agent workspace. Kept across Tracks, so a Track opened later resumes in it. */
   let workspace: string | undefined;
   /** The open Track's folder, named in the Tutor guide. */
@@ -122,17 +125,29 @@ export function activate(context: vscode.ExtensionContext): void {
     if (!session || !current) return;
     const step = current;
     if (msg.action === "runChecks") {
+      if (running) return;
       if (!session.getWorkspace() && !(await pickWorkspace())) {
         message = "Choose your agent workspace to run Checks.";
         return render();
       }
-      const outcome = await session.runChecks(step.id);
-      results = outcome.status === "ran" ? outcome.results : undefined;
-      message = outcome.status === "tooling-missing" ? outcome.message : undefined;
-      tree.refresh();
-      await saveProgress();
-      await syncCurrentStep();
-      render();
+      if (running) return;
+      running = true;
+      try {
+        const dirty = vscode.workspace.textDocuments.filter((d) => d.isDirty).length;
+        await vscode.workspace.saveAll(false);
+        message = dirty ? `Saved ${dirty} ${dirty === 1 ? "file" : "files"} before running Checks.` : undefined;
+        render();
+        const outcome = await session.runChecks(step.id);
+        results = outcome.status === "ran" ? outcome.results : undefined;
+        ranAt = outcome.status === "ran" ? new Date() : undefined;
+        if (outcome.status === "tooling-missing") message = outcome.message;
+        tree.refresh();
+        await saveProgress();
+        await syncCurrentStep();
+      } finally {
+        running = false;
+        render();
+      }
     } else if (msg.action === "markDone") {
       session.markDone(step.id);
       tree.refresh();
@@ -199,7 +214,8 @@ export function activate(context: vscode.ExtensionContext): void {
       hasNext: session.advance(step.id) !== undefined,
       results,
       message,
-      readOnly: session.isDone(step.id) && session.getCurrentStep() !== step.id,
+      running,
+      ranAt,
       noKeyProvider: session.missingProvider(step.id),
     };
     showDocument(step.title, (nonce, cspSource) => renderPanelDocument(step, state, nonce, cspSource));
@@ -208,6 +224,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const showStep = (step: Step) => {
     current = step;
     results = undefined;
+    ranAt = undefined;
     message = undefined;
     render();
     void syncCurrentStep();
