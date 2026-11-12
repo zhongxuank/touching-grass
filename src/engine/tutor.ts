@@ -63,6 +63,7 @@ export function renderCurrentStep(step: Step, results?: CheckResult[]): string {
     step.codeChunk.place ? `- Where: ${step.codeChunk.place}` : undefined,
     step.provider ? `- Provider: ${step.provider}` : undefined,
     step.habit ? `- Habit: ${step.habit}` : undefined,
+    step.run ? `- Run: \`${step.run}\`` : undefined,
     step.checks.length ? `- Checks: ${step.checks.map((c) => `\`${c}\``).join(", ")}` : "- Checks: none",
   ].filter((line) => line !== undefined);
   const fence = step.codeChunk.code.includes("```") ? "````" : "```";

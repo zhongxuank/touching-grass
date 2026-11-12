@@ -49,6 +49,11 @@ describe("renderCurrentStep", () => {
     expect(text).not.toContain("Last Check results");
   });
 
+  it("lists the run command when the Step has one", () => {
+    expect(renderCurrentStep({ ...step, run: "uv run python ask.py" })).toContain("- Run: `uv run python ask.py`");
+    expect(renderCurrentStep(step)).not.toContain("- Run:");
+  });
+
   it("adds failed Check output, but not output of passed Checks", () => {
     const text = renderCurrentStep({ ...step, checks: ["a.py", "b.py"] }, [
       { check: "a.py", passed: true, output: "all good" },
