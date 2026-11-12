@@ -24,6 +24,7 @@ import {
   type PanelState,
 } from "./stepHtml";
 import { TrackTree } from "./trackTree";
+import { parseTutorOpenMode, routeTutor, type ContributedCommand } from "./tutorLaunch";
 
 /** globalState key: agent workspace path -> the Track folder last used in it. */
 const TRACK_BY_WORKSPACE = "touchingGrass.trackByWorkspace";
@@ -49,6 +50,9 @@ export function activate(context: vscode.ExtensionContext): void {
   let shownPage: string | undefined;
   let results: PanelState["results"];
   let message: string | undefined;
+  let ranAt: Date | undefined;
+  /** Guard: a second Run Checks click while Checks run is ignored. */
+  let running = false;
   /** The Learner's agent workspace. Kept across Tracks, so a Track opened later resumes in it. */
   let workspace: string | undefined;
   /** The open Track's folder, named in the Tutor guide. */
@@ -56,6 +60,9 @@ export function activate(context: vscode.ExtensionContext): void {
   /** The terminal running Claude Code as the Tutor, reused while it is open. */
   let tutorTerminal: vscode.Terminal | undefined;
   let tutorFolder: string | undefined;
+  /** The terminal that runs Steps' `run:` commands, reused while it is open. */
+  let runTerminal: vscode.Terminal | undefined;
+  let runFolder: string | undefined;
 
   /** Keep the Tutor's copy of the current Step up to date. Silent unless writing fails. */
   const syncCurrentStep = async () => {
@@ -65,16 +72,52 @@ export function activate(context: vscode.ExtensionContext): void {
     if (error) void vscode.window.showWarningMessage(error);
   };
 
-  /** Open Claude Code in the agent workspace, asking about the current Step. */
-  const askTutor = () => {
+  /**
+   * Ask Claude about the current Step: copy the question to the Claude Code extension's chat, or run Claude Code
+   * in a terminal, as the touchingGrass.tutor.open setting says.
+   */
+  /** Copy the question and run the Claude Code extension's open command. False when the command fails. */
+  const openClaudeExtension = async (command: string): Promise<boolean> => {
+    try {
+      await vscode.env.clipboard.writeText(TUTOR_PROMPT);
+      await vscode.commands.executeCommand(command);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const askTutor = async () => {
     const folder = session?.getWorkspace();
     if (!folder) return;
-    if (!tutorTerminal || tutorTerminal.exitStatus !== undefined || tutorFolder !== folder) {
-      tutorTerminal = vscode.window.createTerminal({ name: "Claude tutor", cwd: folder });
-      tutorFolder = folder;
-      tutorTerminal.sendText(`claude "${TUTOR_PROMPT}"`);
+    const mode = parseTutorOpenMode(vscode.workspace.getConfiguration("touchingGrass.tutor").get("open"));
+    const claude = vscode.extensions.getExtension("anthropic.claude-code");
+    const claudeCommands = claude ? ((claude.packageJSON?.contributes?.commands as ContributedCommand[]) ?? []) : undefined;
+    const route = routeTutor(mode, claudeCommands);
+    if (route.kind === "error") {
+      void vscode.window.showErrorMessage(route.message);
+    } else if (route.kind === "extension" && (await openClaudeExtension(route.command))) {
+      void vscode.window.showInformationMessage("Question copied. Paste it into Claude.");
+    } else {
+      if (!tutorTerminal || tutorTerminal.exitStatus !== undefined || tutorFolder !== folder) {
+        tutorTerminal = vscode.window.createTerminal({ name: "Claude tutor", cwd: folder });
+        tutorFolder = folder;
+        tutorTerminal.sendText(`claude "${TUTOR_PROMPT}"`);
+      }
+      tutorTerminal.show();
     }
-    tutorTerminal.show();
+  };
+
+  /** Run a Step's command in the "touching grass" terminal in the agent workspace, reusing it while it is open. */
+  const runCommand = (command: string) => {
+    const folder = session?.getWorkspace();
+    if (!folder) return;
+    if (!runTerminal || runTerminal.exitStatus !== undefined || runFolder !== folder) {
+      runTerminal = vscode.window.createTerminal({ name: "touching grass", cwd: folder });
+      runFolder = folder;
+    }
+    runTerminal.show();
+    runTerminal.sendText(command);
   };
 
   /** Wait for progress to reach the workspace, and say so if it could not be saved. */
@@ -154,17 +197,35 @@ export function activate(context: vscode.ExtensionContext): void {
     if (!current) return;
     const step = current;
     if (msg.action === "runChecks") {
+      if (running) return;
       if (!session.getWorkspace() && !(await pickWorkspace())) {
         message = "Choose your agent workspace to run Checks.";
         return render();
       }
-      const outcome = await session.runChecks(step.id);
-      results = outcome.status === "ran" ? outcome.results : undefined;
-      message = outcome.status === "tooling-missing" ? outcome.message : undefined;
-      tree.refresh();
-      await saveProgress();
-      await syncCurrentStep();
-      render();
+      if (running) return;
+      running = true;
+      try {
+        const dirty = vscode.workspace.textDocuments.filter((d) => d.isDirty).length;
+        await vscode.workspace.saveAll(false);
+        message = dirty ? `Saved ${dirty} ${dirty === 1 ? "file" : "files"} before running Checks.` : undefined;
+        render();
+        const outcome = await session.runChecks(step.id);
+        results = outcome.status === "ran" ? outcome.results : undefined;
+        ranAt = outcome.status === "ran" ? new Date() : undefined;
+        if (outcome.status === "tooling-missing") message = outcome.message;
+        tree.refresh();
+        await saveProgress();
+        await syncCurrentStep();
+      } finally {
+        running = false;
+        render();
+      }
+    } else if (msg.action === "runCommand" && step.run) {
+      if (!session.getWorkspace() && !(await pickWorkspace())) {
+        message = "Choose your agent workspace to run your code.";
+        return render();
+      }
+      runCommand(step.run);
     } else if (msg.action === "markDone") {
       session.markDone(step.id);
       tree.refresh();
@@ -176,7 +237,7 @@ export function activate(context: vscode.ExtensionContext): void {
         return render();
       }
       await syncCurrentStep();
-      askTutor();
+      await askTutor();
     } else if (msg.action === "openCheck" && msg.check && step.checks.includes(msg.check)) {
       await vscode.window.showTextDocument(vscode.Uri.file(session.checkFilePath(msg.check)), {
         viewColumn: vscode.ViewColumn.One,
@@ -225,7 +286,8 @@ export function activate(context: vscode.ExtensionContext): void {
       nav: pageNav(session, step.id),
       results,
       message,
-      readOnly: session.isDone(step.id) && session.getCurrentStep() !== step.id,
+      running,
+      ranAt,
       noKeyProvider: session.missingProvider(step.id),
     };
     showDocument(pageTitle(session, step.id) ?? step.title, (nonce, cspSource) => renderPanelDocument(step, state, nonce, cspSource));
@@ -245,6 +307,7 @@ export function activate(context: vscode.ExtensionContext): void {
     current = step;
     markOpen(step.id);
     results = undefined;
+    ranAt = undefined;
     message = undefined;
     render();
     void syncCurrentStep();
@@ -357,6 +420,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.window.onDidCloseTerminal((t) => {
       if (t === tutorTerminal) tutorTerminal = undefined;
+      if (t === runTerminal) runTerminal = undefined;
     }),
     treeView,
     registerPasteNudge(() => current),

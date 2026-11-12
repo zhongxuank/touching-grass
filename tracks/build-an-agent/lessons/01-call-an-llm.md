@@ -327,6 +327,29 @@ def ask(
     return with_retries(lambda: module.ask(prompt, system=system, max_tokens=max_tokens))
 ```
 
+## Step: Try it
+
+checks: test_ask_script.py
+run: uv run python ask.py "What is an LLM, in one sentence?"
+
+You have written `ask()` but never called it yourself. This small script does that from the command line. `sys.argv[1:]` holds the words you type after `ask.py`, `" ".join(...)` glues them into one prompt, and `or` falls back to a default prompt when you type nothing. Putting the work in `main()` and calling it only under `if __name__ == "__main__"` means the file can also be imported (the Check does that) without running anything.
+
+Type it, then press the Run it button. It needs the key you put in `.env`. You should see a one-sentence answer printed, and, if you turn logging on, the request that was sent.
+
+```python file=ask.py
+import sys
+
+from agent.llm import ask
+
+
+def main(args: list[str]) -> None:
+    print(ask(" ".join(args) or "Say hello in five words."))
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
+```
+
 ## Reflection
 
 - Why does each Provider get its own file and share one `ask()` signature, instead of one file full of `if provider == ...`?

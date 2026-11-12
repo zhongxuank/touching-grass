@@ -25,6 +25,8 @@ export interface Step {
   checks: string[];
   /** A Habit of the Track this Step's Code Chunk models. Shown as a callout. */
   habit?: string;
+  /** A shell command the Learner runs in the agent workspace to see their code work, from the `run:` line. */
+  run?: string;
 }
 
 export interface Lesson {

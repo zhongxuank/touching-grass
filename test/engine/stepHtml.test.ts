@@ -146,11 +146,21 @@ describe("Step panel", () => {
   it("offers Ask Claude on every Step, including read-only and keyless ones", () => {
     for (const state of [
       { done: false },
-      { done: true, readOnly: true },
+      { done: true },
       { done: false, noKeyProvider: "openai" },
     ]) {
       expect(renderPanelControls(withChecks, state)).toContain('data-action="askTutor"');
     }
+  });
+
+  it("shows a Run it button with the command when the Step has a run line, with or without Checks", () => {
+    const runStep: Step = { ...step, run: "uv run python ask.py <x>" };
+    for (const s of [runStep, { ...runStep, checks: ["test_a.py"] }]) {
+      const html = renderPanelControls(s, { done: false });
+      expect(html).toContain('data-action="runCommand"');
+      expect(html).toContain("Run it: <code>uv run python ask.py &lt;x&gt;</code>");
+    }
+    expect(renderPanelControls(step, { done: false })).not.toContain("runCommand");
   });
 
   it("gives Reflection and overview panels the same CSP document but no Step controls", () => {
@@ -171,11 +181,46 @@ describe("Step panel", () => {
     expect(html).not.toContain("Run Checks");
   });
 
-  it("hides Run Checks and Mark done on a read-only done Step", () => {
-    const withChecksHtml = renderPanelControls(withChecks, { done: true, readOnly: true });
-    expect(withChecksHtml).not.toContain("Run Checks");
-    const noChecksHtml = renderPanelControls(step, { done: true, readOnly: true });
-    expect(noChecksHtml).not.toContain("markDone");
+  it("keeps Run Checks on a done Step so its Checks can be re-run", () => {
+    const html = renderPanelControls(withChecks, { done: true });
+    expect(html).toContain('data-action="runChecks"');
+    expect(html).not.toContain('data-action="next"');
+  });
+
+  it("shows Running Checks... and disables Run Checks while a run is in progress", () => {
+    const html = renderPanelControls(withChecks, { done: false, running: true });
+    expect(html).toContain("Running Checks...");
+    expect(html).toMatch(/<button[^>]*data-action="runChecks"[^>]*disabled/);
+  });
+
+  it("does not show Running Checks... or disable the button when idle", () => {
+    const html = renderPanelControls(withChecks, { done: false });
+    expect(html).not.toContain("Running Checks...");
+    expect(html).not.toMatch(/data-action="runChecks"[^>]*disabled/);
+  });
+
+  it("shows the local time the results ran, so a repeat failure is visibly a new run", () => {
+    const html = renderPanelControls(withChecks, {
+      done: false,
+      results: [{ check: "test_a.py", passed: false, output: "boom" }],
+      ranAt: new Date(2026, 0, 2, 17, 42, 5),
+    });
+    expect(html).toContain("Ran at 17:42:05");
+  });
+
+  it("pads the time and shows no time before any run", () => {
+    const early = renderPanelControls(withChecks, {
+      done: false,
+      results: [],
+      ranAt: new Date(2026, 0, 2, 7, 4, 9),
+    });
+    expect(early).toContain("Ran at 07:04:09");
+    expect(renderPanelControls(withChecks, { done: false })).not.toContain("Ran at");
+  });
+
+  it("shows the status message, such as how many documents were saved", () => {
+    const html = renderPanelControls(withChecks, { done: false, message: "Saved 2 files." });
+    expect(html).toContain("Saved 2 files.");
   });
 });
 

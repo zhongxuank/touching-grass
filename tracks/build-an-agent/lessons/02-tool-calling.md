@@ -322,6 +322,8 @@ def run_agent(prompt: str, *, provider: str | None = None) -> str:
 
 ## Step: Run your agent
 
+run: uv run python main.py
+
 Time to use it. `logging.basicConfig(level=logging.INFO)` turns on the logging you wrote in both Lessons, so you will see every request sent to the model and every tool it calls, followed by the final answer. Run it with `uv run python main.py`. A question that needs both tools shows several trips round the loop.
 
 ```python file=main.py
