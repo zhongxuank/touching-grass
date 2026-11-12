@@ -56,7 +56,27 @@
         "view": "touchingGrass.track",
         "contents": "No Track open.\n[Open Track](command:touchingGrass.openTrack)"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "touching grass",
+      "properties": {
+        "touchingGrass.tutor.open": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "extension",
+            "terminal"
+          ],
+          "enumDescriptions": [
+            "Use the Claude Code extension's chat if it is installed, otherwise a terminal.",
+            "Use the Claude Code extension's chat. Show an error if it is not installed.",
+            "Always run Claude Code in a terminal called \"Claude tutor\"."
+          ],
+          "default": "auto",
+          "description": "How \"Ask Claude about this Step\" opens the Tutor."
+        }
+      }
+    }
   },
   "scripts": {
     "build": "node esbuild.mjs",
