@@ -323,8 +323,11 @@ def run_agent(prompt: str, *, provider: str | None = None) -> str:
 ## Step: Run your agent
 
 run: uv run python main.py
+habit: Commit after each Lesson
 
-Time to use it. `logging.basicConfig(level=logging.INFO)` turns on the logging you wrote in both Lessons, so you will see every request sent to the model and every tool it calls, followed by the final answer. Run it with `uv run python main.py`. A question that needs both tools shows several trips round the loop.
+Time to use it. `logging.basicConfig(level=logging.INFO)` turns on the logging you wrote in both Lessons, so you will see every request sent to the model and every tool it calls, followed by the final answer. Run it with `uv run python main.py`, or press the Run it button after you have typed the file. A question that needs both tools shows several trips round the loop.
+
+When the agent answers both parts of the question, commit Lesson 2 so git records what this Lesson added on top of Lesson 1. In the terminal, from your agent folder, run `git add -A && git commit -m "Lesson 2: tool calling"`. Your `.env` stays out of the commit because it is ignored.
 
 ```python file=main.py
 import logging

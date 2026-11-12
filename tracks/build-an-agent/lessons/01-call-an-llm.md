@@ -26,9 +26,16 @@ dependencies = [
 pythonpath = ["."]
 ```
 
-## Step: Ignore files that should not be committed
+## Step: Start git and ignore files that should not be committed
 
-`.venv/` is the virtual environment uv creates, `__pycache__/` holds compiled Python, and `.env` will hold your API keys. A key committed to git is effectively public and has to be revoked, so list `.env` before you create it.
+run: git init
+habit: Commit after each Lesson
+
+Git keeps a record of every change to your project. You can compare against an earlier version or go back to one, and each Lesson will add one commit, so the history shows what each Lesson added. `git init` (the Run it button) creates the repository in your agent folder. It does not add any files yet.
+
+Next, type the `.gitignore` file. It lists what git should leave out. `.venv/` is the virtual environment uv creates, `__pycache__/` holds compiled Python, and `.env` will hold your API keys. A key committed to git is effectively public and has to be revoked, so list `.env` before you create it. Because `.env` is ignored, your key never enters git. That is also why the next Step has a `.env.example` file to commit instead.
+
+Press Run it after you have typed the file, and the repository is ready for your first commit at the end of this Lesson.
 
 ```gitignore file=.gitignore
 .venv/
@@ -331,10 +338,13 @@ def ask(
 
 checks: test_ask_script.py
 run: uv run python ask.py "What is an LLM, in one sentence?"
+habit: Commit after each Lesson
 
 You have written `ask()` but never called it yourself. This small script does that from the command line. `sys.argv[1:]` holds the words you type after `ask.py`, `" ".join(...)` glues them into one prompt, and `or` falls back to a default prompt when you type nothing. Putting the work in `main()` and calling it only under `if __name__ == "__main__"` means the file can also be imported (the Check does that) without running anything.
 
 Type it, then press the Run it button. It needs the key you put in `.env`. You should see a one-sentence answer printed, and, if you turn logging on, the request that was sent.
+
+Once it works, commit Lesson 1 so git records what this Lesson added. In the terminal, from your agent folder, run `git add -A && git commit -m "Lesson 1: call an LLM"`. `git add -A` stages every change, and `.env` stays out because it is ignored. A commit is a saved snapshot you can compare against or return to later. If you want a copy of your project off your machine, you can push it to a private GitHub repository, but that is your choice and the Track does not need it.
 
 ```python file=ask.py
 import sys

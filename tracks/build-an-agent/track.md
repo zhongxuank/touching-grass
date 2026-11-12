@@ -6,6 +6,7 @@ habits:
   - Handle API errors and retries
   - Log what is sent to the model
   - Small functions
+  - Commit after each Lesson
 lessons:
   - lessons/01-call-an-llm.md
   - lessons/02-tool-calling.md
