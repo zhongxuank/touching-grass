@@ -22,6 +22,10 @@ Plan before writing a file, and show the Learner the outline (Lessons, Step titl
 - Every Lesson ends with a Step that has a `run:` line (for example `run: uv run python main.py`), so the Learner runs their code and sees it work. Add a small entry-point file for it if the Lesson has none.
 - Every Lesson ends with a Reflection of 1 or 2 "why" questions.
 
+### Building on an earlier Track
+
+A Track may continue another one (for example a RAG Track that extends the agents Track's project). Set `builds_on: <earlier Track title>` in `track.md`, with the title exactly as the earlier Track's `title`. The new Track must extend that Track's `reference/` project in the same workspace, not re-teach it: skip its setup Steps, treat its files as existing (give a Step that changes one a `place:` line, though the validator only enforces that for files this Track created; its Checks may import them), and start from where its last Lesson ended. Read the earlier Track's `reference/` folder before planning. See Builds on in `docs/track-format.md`.
+
 ### Setup Steps (Python)
 
 The first Lesson opens with Steps that make the workspace a uv project: `pyproject.toml` (with pytest settings so imports resolve), a `.gitignore` that ignores `.env`, and, when the Track uses an API key, a `.env.example` listing the key names with empty values. The explanation says why secrets stay out of the repository.

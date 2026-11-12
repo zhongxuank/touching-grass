@@ -107,7 +107,7 @@ describe("Provider Steps without a key", () => {
     expect(session.isDone(OPENAI_1)).toBe(true);
     expect(session.isSkipped(OPENAI_1)).toBe(true);
     await session.flush();
-    const saved = JSON.parse(await fs.readFile(path.join(workspace, PROGRESS_DIR, PROGRESS_FILE), "utf8"));
+    const saved = JSON.parse(await fs.readFile(path.join(workspace, PROGRESS_DIR, PROGRESS_FILE), "utf8")).tracks["Provider Track"];
     expect(saved.skippedSteps).toEqual([OPENAI_1]);
     expect(saved.doneSteps).toContain(OPENAI_1);
   });
@@ -186,7 +186,7 @@ describe("choosing a Provider", () => {
     session.advance(OPENAI_1);
     session.chooseProvider("claude");
     await session.flush();
-    const saved = JSON.parse(await fs.readFile(path.join(workspace, PROGRESS_DIR, PROGRESS_FILE), "utf8"));
+    const saved = JSON.parse(await fs.readFile(path.join(workspace, PROGRESS_DIR, PROGRESS_FILE), "utf8")).tracks["Provider Track"];
     expect(saved.chosenProvider).toBe("claude");
 
     const again = await load(dotEnv);

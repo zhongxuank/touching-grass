@@ -43,6 +43,8 @@ export interface Lesson {
 export interface Track {
   title: string;
   habits: string[];
+  /** Title of the earlier Track this one continues (`builds_on:` in track.md), if any. */
+  buildsOn?: string;
   /** Lessons in the order the Track file lists them. */
   lessons: Lesson[];
 }

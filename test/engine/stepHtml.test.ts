@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  describeStarterOutcome,
   renderPanelControls,
   renderPanelDocument,
   renderReflectionDocument,
@@ -331,5 +332,35 @@ describe("pageNav and pageTitle from a session", () => {
     const session = await load();
     expect(pageTitle(session, "01-call/3")).toBe("1.3 Call OpenAI");
     expect(pageTitle(session, "01-call/reflection")).toBe("Reflection: Call an LLM");
+  });
+});
+
+describe("the builds-on notice", () => {
+  it("offers Start from its finished code when the earlier Track is unfinished", () => {
+    const html = renderPanelDocument(step, { done: false, buildsOn: { state: "unfinished", title: "Agents <1>" } }, "n", "csp:");
+    expect(html).toContain("This Track continues Agents &lt;1&gt;. Finish it first, or start from its finished code.");
+    expect(html).toContain('data-action="startFromEarlier"');
+    expect(html).toContain("Start from its finished code");
+  });
+
+  it("says the earlier Track is missing, with no button", () => {
+    const html = renderPanelDocument(step, { done: false, buildsOn: { state: "missing", title: "Gone" } }, "n", "csp:");
+    expect(html).toContain("Gone");
+    expect(html).toMatch(/not found/);
+    expect(html).not.toContain('data-action="startFromEarlier"');
+  });
+
+  it("describes what the starter copied and what it skipped", () => {
+    expect(describeStarterOutcome({ status: "copied", copied: ["a.py"], skipped: [] })).toBe("Copied 1 file into your workspace.");
+    expect(describeStarterOutcome({ status: "copied", copied: ["a.py", "b.py"], skipped: ["c.py", "d/e.py"] })).toBe(
+      "Copied 2 files into your workspace. Skipped 2 files that already exist: c.py, d/e.py.",
+    );
+  });
+
+  it("shows nothing without a notice, and shows on the Track overview too", () => {
+    expect(renderPanelDocument(step, { done: false }, "n", "csp:")).not.toContain("This Track continues");
+    const track: Track = { title: "T", habits: [], lessons: [] };
+    const html = renderTrackDocument(track, "n", "csp:", { state: "unfinished", title: "Earlier" });
+    expect(html).toContain("This Track continues Earlier.");
   });
 });

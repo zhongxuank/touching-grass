@@ -59,10 +59,8 @@ describe("saving and loading progress", () => {
 
     const saved = JSON.parse(await fs.readFile(progressPath, "utf8"));
     expect(saved).toEqual({
-      version: 1,
-      trackTitle: "Fixture Track",
-      doneSteps: [NO_CHECKS],
-      currentStep: WITH_CHECKS,
+      version: 2,
+      tracks: { "Fixture Track": { doneSteps: [NO_CHECKS], currentStep: WITH_CHECKS } },
     });
 
     const second = await load();
@@ -109,22 +107,108 @@ describe("resuming", () => {
     const next = session.advance(NO_CHECKS)!;
     session.openStep(next.id);
     await session.flush();
-    expect(JSON.parse(await fs.readFile(progressPath, "utf8")).currentStep).toBe(WITH_CHECKS);
+    expect(JSON.parse(await fs.readFile(progressPath, "utf8")).tracks["Fixture Track"].currentStep).toBe(WITH_CHECKS);
   });
 });
 
-describe("a progress file for another Track", () => {
-  it("is ignored with a notice, and set aside as a .bak copy", async () => {
+describe("a version 1 progress file", () => {
+  it("is migrated on read and never set aside", async () => {
     await fs.mkdir(path.dirname(progressPath), { recursive: true });
-    const other = JSON.stringify({ version: 1, trackTitle: "Other Track", doneSteps: ["x/1"] });
-    await fs.writeFile(progressPath, other);
-
+    await fs.writeFile(
+      progressPath,
+      JSON.stringify({
+        version: 1,
+        trackTitle: "Fixture Track",
+        doneSteps: [NO_CHECKS],
+        currentStep: WITH_CHECKS,
+        skippedSteps: [NO_CHECKS],
+        chosenProvider: "claude",
+      }),
+    );
     const session = await load();
-    const { notice } = await session.openWorkspace(workspace);
-    expect(notice).toMatch(/another Track/);
-    expect(notice).toMatch(/Other Track/);
+    expect(await session.openWorkspace(workspace)).toEqual({});
+    expect(session.isDone(NO_CHECKS)).toBe(true);
+    expect(session.getCurrentStep()).toBe(WITH_CHECKS);
+    expect(session.isSkipped(NO_CHECKS)).toBe(true);
+    expect(session.getChosenProvider()).toBe("claude");
+    await session.flush();
+    expect(await fs.stat(`${progressPath}.bak`).then(() => true, () => false)).toBe(false);
+    expect(JSON.parse(await fs.readFile(progressPath, "utf8"))).toEqual({
+      version: 2,
+      tracks: {
+        "Fixture Track": {
+          doneSteps: [NO_CHECKS],
+          currentStep: WITH_CHECKS,
+          skippedSteps: [NO_CHECKS],
+          chosenProvider: "claude",
+        },
+      },
+    });
+  });
+
+  it("keeps a version 1 file for another Track as that Track's entry", async () => {
+    await fs.mkdir(path.dirname(progressPath), { recursive: true });
+    await fs.writeFile(progressPath, JSON.stringify({ version: 1, trackTitle: "Other Track", doneSteps: ["x/1"] }));
+    const session = await load();
+    expect(await session.openWorkspace(workspace)).toEqual({});
     expect(session.getProgress().doneSteps).toEqual([]);
-    expect(await fs.readFile(`${progressPath}.bak`, "utf8")).toBe(other);
+    session.markDone(NO_CHECKS);
+    await session.flush();
+    const saved = JSON.parse(await fs.readFile(progressPath, "utf8"));
+    expect(saved.tracks["Other Track"]).toEqual({ doneSteps: ["x/1"] });
+    expect(saved.tracks["Fixture Track"].doneSteps).toEqual([NO_CHECKS]);
+    expect(await fs.stat(`${progressPath}.bak`).then(() => true, () => false)).toBe(false);
+  });
+});
+
+describe("two Tracks in one workspace", () => {
+  async function loadOther() {
+    const result = await loadTrack(fixture("provider-track"), {
+      checkRunner: { run: async () => ({ ok: true, results: [] }) },
+      processEnv: {},
+      readEnv: async () => ({}),
+    });
+    if (!result.ok) throw new Error(JSON.stringify(result.errors));
+    return result.session;
+  }
+
+  it("keeps each Track's progress in its own entry", async () => {
+    const a = await load();
+    await a.openWorkspace(workspace);
+    a.markDone(NO_CHECKS);
+    await a.flush();
+
+    const b = await loadOther();
+    expect((await b.openWorkspace(workspace)).notice).toBeUndefined();
+    expect(b.getProgress().doneSteps).toEqual([]);
+    const firstStep = b.getCurrentStep()!;
+    b.markDone(firstStep);
+    await b.flush();
+
+    const saved = JSON.parse(await fs.readFile(progressPath, "utf8"));
+    expect(Object.keys(saved.tracks).sort()).toEqual(["Fixture Track", "Provider Track"]);
+    expect(saved.tracks["Fixture Track"].doneSteps).toEqual([NO_CHECKS]);
+    expect(saved.tracks["Provider Track"].doneSteps).toEqual([firstStep]);
+    expect(await fs.stat(`${progressPath}.bak`).then(() => true, () => false)).toBe(false);
+
+    const again = await load();
+    await again.openWorkspace(workspace);
+    expect(again.isDone(NO_CHECKS)).toBe(true);
+  });
+
+  it("does not undo another Track's progress saved while this one was open", async () => {
+    const a = await load();
+    await a.openWorkspace(workspace);
+    const b = await loadOther();
+    await b.openWorkspace(workspace);
+    const firstStep = b.getCurrentStep()!;
+    b.markDone(firstStep);
+    await b.flush();
+    a.markDone(NO_CHECKS);
+    await a.flush();
+    const saved = JSON.parse(await fs.readFile(progressPath, "utf8"));
+    expect(saved.tracks["Provider Track"].doneSteps).toEqual([firstStep]);
+    expect(saved.tracks["Fixture Track"].doneSteps).toEqual([NO_CHECKS]);
   });
 });
 
@@ -147,6 +231,14 @@ describe("a corrupt progress file", () => {
     expect(notice).toMatch(/doneSteps/);
     expect(mem.backups).toHaveLength(1);
     expect(session.getProgress().doneSteps).toEqual([]);
+  });
+
+  it("treats a version 2 file with a malformed Track entry as corrupt", async () => {
+    const mem = memoryStore(JSON.stringify({ version: 2, tracks: { "Fixture Track": { doneSteps: "all" } } }));
+    const session = await load();
+    const { notice } = await session.openWorkspace(workspace, mem.store);
+    expect(notice).toMatch(/doneSteps/);
+    expect(mem.backups).toHaveLength(1);
   });
 
   it("ignores saved Step ids that are not in the Track", async () => {

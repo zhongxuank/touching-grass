@@ -5,6 +5,7 @@ import {
   TUTOR_PROMPT,
   writeCurrentStep,
   writeTutorGuide,
+  type BuildsOnNotice,
   type Lesson,
   type Page,
   type Step,
@@ -16,6 +17,7 @@ import * as path from "node:path";
 import { showValidationErrors } from "./diagnostics";
 import { registerPasteNudge } from "./pasteNudge";
 import {
+  describeStarterOutcome,
   pageNav,
   pageTitle,
   renderPanelDocument,
@@ -51,6 +53,8 @@ export function activate(context: vscode.ExtensionContext): void {
   let results: PanelState["results"];
   let message: string | undefined;
   let ranAt: Date | undefined;
+  /** The notice about the earlier Track this Track builds on, if it applies. Looked up when a workspace is attached. */
+  let buildsOn: BuildsOnNotice | undefined;
   /** Guard: a second Run Checks click while Checks run is ignored. */
   let running = false;
   /** The Learner's agent workspace. Kept across Tracks, so a Track opened later resumes in it. */
@@ -136,6 +140,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }
     const { notice } = await session.openWorkspace(folder);
     if (notice) void vscode.window.showWarningMessage(notice);
+    buildsOn = await session.getBuildsOn();
     if (trackFolder) {
       const error = await writeTutorGuide(folder, { trackTitle: session.track.title, trackFolder });
       if (error) void vscode.window.showWarningMessage(error);
@@ -179,8 +184,25 @@ export function activate(context: vscode.ExtensionContext): void {
     else showReflection(page.lesson);
   };
 
+  /** Copy the earlier Track's finished code into the workspace, then show what was copied and skipped. */
+  const startFromEarlier = async () => {
+    if (!session) return;
+    if (!session.getWorkspace() && !(await pickWorkspace())) {
+      message = describeStarterOutcome({ status: "no-workspace" });
+    } else {
+      const outcome = await session.startFromEarlierCode();
+      message = describeStarterOutcome(outcome);
+      void vscode.window.showInformationMessage(message);
+      await saveProgress();
+      buildsOn = await session.getBuildsOn();
+    }
+    if (current) render();
+    else showTrackOverview();
+  };
+
   const onPanelMessage = async (msg: { action: string; check?: string }) => {
     if (!session) return;
+    if (msg.action === "startFromEarlier") return startFromEarlier();
     if (msg.action === "previous" && shownPage) {
       const page = session.previousPage(shownPage);
       if (page) openPage(page);
@@ -289,6 +311,7 @@ export function activate(context: vscode.ExtensionContext): void {
       running,
       ranAt,
       noKeyProvider: session.missingProvider(step.id),
+      buildsOn,
     };
     showDocument(pageTitle(session, step.id) ?? step.title, (nonce, cspSource) => renderPanelDocument(step, state, nonce, cspSource));
   };
@@ -335,6 +358,11 @@ export function activate(context: vscode.ExtensionContext): void {
     current = undefined;
     markOpen(pageId);
     showDocument(title, document);
+  };
+
+  const showTrackOverview = () => {
+    const track = session?.track;
+    if (track) showOverview(track.title, (n, c) => renderTrackDocument(track, n, c, buildsOn));
   };
 
   const showReflection = (lesson: Lesson) => {
@@ -395,6 +423,7 @@ export function activate(context: vscode.ExtensionContext): void {
     const opened = result.session;
     session = opened;
     trackFolder = folder;
+    buildsOn = undefined;
     current = undefined;
     shownPage = undefined;
     tree.setSession(opened);
@@ -444,9 +473,9 @@ export function activate(context: vscode.ExtensionContext): void {
       return lesson?.title;
     }),
     vscode.commands.registerCommand("touchingGrass.openTrackOverview", () => {
-      const track = session?.track;
-      if (track) showOverview(track.title, (n, c) => renderTrackDocument(track, n, c));
-      return track?.title;
+      message = undefined;
+      showTrackOverview();
+      return session?.track.title;
     }),
     problems,
     vscode.commands.registerCommand("touchingGrass.validateTrack", async (folder?: vscode.Uri) => {
