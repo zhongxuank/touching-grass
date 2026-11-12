@@ -144,7 +144,7 @@ describe("Step panel", () => {
   it("offers Ask Claude on every Step, including read-only and keyless ones", () => {
     for (const state of [
       { done: false, hasNext: true },
-      { done: true, hasNext: true, readOnly: true },
+      { done: true, hasNext: true },
       { done: false, hasNext: true, noKeyProvider: "openai" },
     ]) {
       expect(renderPanelControls(withChecks, state)).toContain('data-action="askTutor"');
@@ -173,13 +173,48 @@ describe("Step panel", () => {
     expect(html).not.toContain("Run Checks");
   });
 
-  it("hides Run Checks and Mark done on a read-only done Step, but keeps Next Step", () => {
-    const withChecksHtml = renderPanelControls(withChecks, { done: true, hasNext: true, readOnly: true });
-    expect(withChecksHtml).not.toContain("Run Checks");
-    expect(withChecksHtml).toContain('data-action="next"');
-    const noChecksHtml = renderPanelControls(step, { done: true, hasNext: true, readOnly: true });
-    expect(noChecksHtml).not.toContain("markDone");
-    expect(noChecksHtml).toContain('data-action="next"');
+  it("keeps Run Checks and Next Step on a done Step so its Checks can be re-run", () => {
+    const html = renderPanelControls(withChecks, { done: true, hasNext: true });
+    expect(html).toContain('data-action="runChecks"');
+    expect(html).toContain('data-action="next"');
+  });
+
+  it("shows Running Checks... and disables Run Checks while a run is in progress", () => {
+    const html = renderPanelControls(withChecks, { done: false, hasNext: true, running: true });
+    expect(html).toContain("Running Checks...");
+    expect(html).toMatch(/<button[^>]*data-action="runChecks"[^>]*disabled/);
+  });
+
+  it("does not show Running Checks... or disable the button when idle", () => {
+    const html = renderPanelControls(withChecks, { done: false, hasNext: true });
+    expect(html).not.toContain("Running Checks...");
+    expect(html).not.toMatch(/data-action="runChecks"[^>]*disabled/);
+  });
+
+  it("shows the local time the results ran, so a repeat failure is visibly a new run", () => {
+    const html = renderPanelControls(withChecks, {
+      done: false,
+      hasNext: true,
+      results: [{ check: "test_a.py", passed: false, output: "boom" }],
+      ranAt: new Date(2026, 0, 2, 17, 42, 5),
+    });
+    expect(html).toContain("Ran at 17:42:05");
+  });
+
+  it("pads the time and shows no time before any run", () => {
+    const early = renderPanelControls(withChecks, {
+      done: false,
+      hasNext: true,
+      results: [],
+      ranAt: new Date(2026, 0, 2, 7, 4, 9),
+    });
+    expect(early).toContain("Ran at 07:04:09");
+    expect(renderPanelControls(withChecks, { done: false, hasNext: true })).not.toContain("Ran at");
+  });
+
+  it("shows the status message, such as how many documents were saved", () => {
+    const html = renderPanelControls(withChecks, { done: false, hasNext: true, message: "Saved 2 files." });
+    expect(html).toContain("Saved 2 files.");
   });
 });
 
