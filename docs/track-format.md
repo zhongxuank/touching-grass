@@ -33,8 +33,22 @@ lessons:
 | `title`   | yes      | Name of the Track.                                                   |
 | `habits`  | no       | The Habits the Track models, as a list of strings.                   |
 | `lessons` | yes      | Lesson files, relative to the Track folder, in the order to follow.  |
+| `builds_on` | no     | Title of an earlier Track this one continues. See Builds on below.   |
 
 Each Lesson file is listed once. Two Lesson files must not share an id, which is the file name without its extension (`lessons/a/01.md` and `lessons/b/01.md` both have id `01`, so one must be renamed).
+
+### Builds on
+
+A Track may continue another: `builds_on: Build an AI agent from scratch` names the earlier Track by its `title`. The value must be a non-empty string. The Track then extends the earlier Track's project in the same agent workspace. It does not re-teach it: its Steps assume the files the earlier Track's last Step left (its `reference/` folder), and its first Lesson starts from them.
+
+The earlier Track is found by title among the sibling folders of the open Track (the built-in Tracks in `tracks/`). When the Learner opens the Track in a workspace:
+
+- If the workspace's progress shows the earlier Track finished (every visible Step done), nothing happens.
+- Otherwise the panel shows "This Track continues <title>. Finish it first, or start from its finished code." with a **Start from its finished code** button. The button copies the earlier Track's `reference/` folder into the workspace, never overwriting an existing file, and lists the files it skipped. The use is recorded as `usedStarter` in the progress file, and the notice goes away.
+- If no sibling Track has that title, the notice says so and has no button.
+- The Provider the Learner chose in the earlier Track carries over as this Track's own, unless they already chose here.
+
+A Track's `reference/` folder is the Learner workspace after its last Step (the draft-track skill generates it). It ships in the vsix without `__pycache__`.
 
 ## Lesson file
 
@@ -143,6 +157,8 @@ interface TrackSession {
   getCurrentStep(): string | undefined;      // the Step the Learner is on; the first Step if none yet
   openStep(stepId: string): Step | undefined; // open in the panel; an unfinished Step becomes current
   getProgress(): Progress;                   // { doneSteps: string[], currentStep?: string }
+  getBuildsOn(): Promise<BuildsOnNotice | undefined>;  // notice for a Track with `builds_on` whose earlier Track is unfinished or missing
+  startFromEarlierCode(): Promise<StarterOutcome>;     // copy the earlier Track's reference/ without overwriting; { status: "copied", copied, skipped }
   flush(): Promise<string | undefined>;      // wait for saves; a message if one failed
 }
 ```
@@ -151,24 +167,32 @@ interface TrackSession {
 
 ## Progress file
 
-Progress lives in the Learner's agent workspace at `.touching-grass/progress.json`, so it is committed with their code. It is saved on every change (a Step done, the current Step moved).
+Progress lives in the Learner's agent workspace at `.touching-grass/progress.json`, so it is committed with their code. It is saved on every change (a Step done, the current Step moved). One file holds the progress of every Track used in the workspace, keyed by Track title:
 
 ```json
 {
-  "version": 1,
-  "trackTitle": "Build an AI agent from scratch",
-  "doneSteps": ["01-call-an-llm/1", "01-call-an-llm/2"],
-  "currentStep": "01-call-an-llm/3",
-  "skippedSteps": ["01-call-an-llm/2"],
-  "chosenProvider": "claude"
+  "version": 2,
+  "tracks": {
+    "Build an AI agent from scratch": {
+      "doneSteps": ["01-call-an-llm/1", "01-call-an-llm/2"],
+      "currentStep": "01-call-an-llm/3",
+      "skippedSteps": ["01-call-an-llm/2"],
+      "chosenProvider": "claude"
+    },
+    "Build a RAG assistant": {
+      "doneSteps": [],
+      "usedStarter": true
+    }
+  }
 }
 ```
 
-- `trackTitle` identifies the Track. A file for another Track is ignored and copied to `progress.json.bak`.
-- A file that is not valid (bad JSON, unknown `version`, wrong field types) is copied to `progress.json.bak` and progress starts fresh.
+- Opening another Track in the same workspace adds its entry and leaves the others untouched. Saving a Track rewrites only its own entry.
+- A version 1 file (`{ version: 1, trackTitle, doneSteps, ... }`, one Track at the top level) is migrated on read to a version 2 file holding that Track. It is never set aside.
+- A file that is not valid (bad JSON, unknown `version`, wrong field types in any entry) is copied to `progress.json.bak` and progress starts fresh.
 - Step ids that no longer exist in the Track are dropped on load.
-- `skippedSteps` and `chosenProvider` are optional; files without them load fine.
-- New fields are added to `ProgressFile` in `src/engine/progress.ts`.
+- `currentStep`, `skippedSteps`, `chosenProvider` and `usedStarter` are optional.
+- New per-Track fields are added to `TrackProgress` in `src/engine/progress.ts`.
 
 The engine has no `vscode` import. The extension in `src/extension.ts` is a thin shell over it.
 

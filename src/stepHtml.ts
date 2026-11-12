@@ -1,5 +1,5 @@
 import MarkdownIt from "markdown-it";
-import type { CodeChunk, Lesson, Page, Step, Track, TrackSession } from "./engine";
+import type { BuildsOnNotice, CodeChunk, Lesson, Page, StarterOutcome, Step, Track, TrackSession } from "./engine";
 
 const md = new MarkdownIt({ html: false, linkify: false });
 
@@ -141,6 +141,38 @@ export interface PanelState {
   ranAt?: Date;
   /** Set when the Step is for a Provider the Learner has no key for: read-only, Checks skipped. */
   noKeyProvider?: string;
+  /** Set when the Track builds on an earlier Track the Learner has not finished: shown above the Step. */
+  buildsOn?: BuildsOnNotice;
+}
+
+/** The notice at the top of a Track that builds on another, with the button to start from its finished code. */
+export function renderBuildsOnNotice(notice: BuildsOnNotice | undefined): string {
+  if (!notice) return "";
+  const title = escape(notice.title);
+  if (notice.state === "missing") {
+    return `<aside class="builds-on"><p>This Track continues ${title}, but that Track was not found next to this one, so there is no finished code to start from. Finish it first.</p></aside>\n`;
+  }
+  return `<aside class="builds-on"><p>This Track continues ${title}. Finish it first, or start from its finished code.</p>
+<button data-action="startFromEarlier">Start from its finished code</button></aside>\n`;
+}
+
+/** What to tell the Learner after "Start from its finished code": what was copied, and what was left alone. */
+export function describeStarterOutcome(outcome: StarterOutcome): string {
+  switch (outcome.status) {
+    case "no-workspace":
+      return "Choose your agent workspace to copy the finished code into.";
+    case "missing":
+      return "The earlier Track was not found, so there is no finished code to copy.";
+    case "no-reference":
+      return "The earlier Track has no finished code (reference folder) to copy.";
+    case "copied": {
+      const files = (n: number) => `${n} ${n === 1 ? "file" : "files"}`;
+      const copied = `Copied ${files(outcome.copied.length)} into your workspace.`;
+      return outcome.skipped.length
+        ? `${copied} Skipped ${files(outcome.skipped.length)} that already exist: ${outcome.skipped.join(", ")}.`
+        : copied;
+    }
+  }
 }
 
 /** Opens Claude Code in the agent workspace as the Tutor. Shown on every Step. */
@@ -210,6 +242,7 @@ export function renderDocument(body: string, nonce: string, cspSource: string, n
   .fail { color: var(--vscode-testing-iconFailed, red); }
   .output { white-space: pre-wrap; }
   .habit-callout { border-left: 3px solid var(--vscode-textLink-foreground); padding: 0.25rem 0.75rem; margin: 1rem 0; }
+  .builds-on { border-left: 3px solid var(--vscode-editorWarning-foreground, #c90); padding: 0.25rem 0.75rem; margin: 0 0 1rem; }
   .tutor { margin-top: 1.5rem; padding-top: 0.75rem; border-top: 1px solid var(--vscode-panel-border, #8884); }
   .run { margin: 1rem 0; }
   .reflection-note { opacity: 0.8; font-style: italic; }
@@ -237,7 +270,8 @@ export function renderDocument(body: string, nonce: string, cspSource: string, n
 
 /** The Step panel document: the Step, then its controls and results. */
 export function renderPanelDocument(step: Step, state: PanelState, nonce: string, cspSource: string): string {
-  return renderDocument(`${renderStepHtml(step)}\n${renderPanelControls(step, state)}`, nonce, cspSource, state.nav);
+  const body = `${renderBuildsOnNotice(state.buildsOn)}${renderStepHtml(step)}\n${renderPanelControls(step, state)}`;
+  return renderDocument(body, nonce, cspSource, state.nav);
 }
 
 /** The Reflection panel document: no Step controls, but the same header and footer. */
@@ -246,6 +280,6 @@ export function renderReflectionDocument(lesson: Lesson, nonce: string, cspSourc
 }
 
 /** The Track overview panel document: no Step controls. */
-export function renderTrackDocument(track: Track, nonce: string, cspSource: string): string {
-  return renderDocument(renderTrackHtml(track), nonce, cspSource);
+export function renderTrackDocument(track: Track, nonce: string, cspSource: string, buildsOn?: BuildsOnNotice): string {
+  return renderDocument(`${renderBuildsOnNotice(buildsOn)}${renderTrackHtml(track)}`, nonce, cspSource);
 }
