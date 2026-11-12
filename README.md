@@ -65,7 +65,13 @@ Read each Step's explanation, type the Code Chunk into the file it names, and pr
 
 ### 5. Ask Claude when you are stuck (optional)
 
-Press **Ask Claude about this Step** at the bottom of any Step. It opens a terminal called "Claude tutor" in your agent folder, starts Claude Code there and asks it to read the Step you are on. Then ask your question in that terminal. Pressing the button again brings the same terminal back.
+Press **Ask Claude about this Step** at the bottom of any Step. How it opens is set by `touchingGrass.tutor.open`:
+
+- `auto` (default): if the Claude Code VS Code extension is installed, the extension's chat opens and the question is copied to your clipboard, so paste it in. Otherwise a terminal opens.
+- `extension`: always use the Claude Code extension's chat. If it is not installed, an error names this setting.
+- `terminal`: always open a terminal called "Claude tutor" in your agent folder, which starts Claude Code there and asks it to read the Step you are on. Pressing the button again brings the same terminal back.
+
+Either way, the Step you are on is written for Claude to read first.
 
 Claude acts as a Tutor, not as a pair programmer. When you choose your agent folder, the extension writes two files there that Claude Code reads:
 

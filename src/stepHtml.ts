@@ -64,8 +64,10 @@ export interface PanelState {
   results?: { check: string; passed: boolean; output: string }[];
   /** A notice such as "uv was not found" or "choose a workspace". */
   message?: string;
-  /** An earlier done Step, opened to re-read: no Run Checks or Mark done. Next Step still works. */
-  readOnly?: boolean;
+  /** True while Checks run: the panel says so and disables Run Checks. */
+  running?: boolean;
+  /** When the results were produced, shown as "Ran at HH:MM:SS" so a repeat failure is visibly a new run. */
+  ranAt?: Date;
   /** Set when the Step is for a Provider the Learner has no key for: read-only, Checks skipped. */
   noKeyProvider?: string;
 }
@@ -79,6 +81,9 @@ function renderRun(command: string): string {
   return `<section class="run"><button data-action="runCommand">Run it: <code>${escape(command)}</code></button></section>`;
 }
 
+const pad2 = (n: number) => String(n).padStart(2, "0");
+const localTime = (d: Date) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+
 /** Controls and results below the Step: Run Checks (or Mark done), results, Next Step. */
 export function renderPanelControls(step: Step, state: PanelState): string {
   const parts: string[] = [];
@@ -91,6 +96,7 @@ export function renderPanelControls(step: Step, state: PanelState): string {
     return parts.join("\n");
   }
   if (step.checks.length) {
+    const ran = state.ranAt && state.results ? `\n<p class="ran-at">Ran at ${localTime(state.ranAt)}</p>` : "";
     parts.push(
       `<section class="checks"><h2>Checks</h2><ul>${step.checks
         .map((c) => {
@@ -100,9 +106,12 @@ export function renderPanelControls(step: Step, state: PanelState): string {
             r && !r.passed ? `<pre class="output">${escape(r.output)}</pre>` : ""
           }</li>`;
         })
-        .join("")}</ul>${state.readOnly ? "" : '\n<button data-action="runChecks">Run Checks</button>'}</section>`,
+        .join("")}</ul>${ran}
+<button data-action="runChecks"${state.running ? " disabled" : ""}>Run Checks</button>${
+          state.running ? '\n<p class="notice running">Running Checks...</p>' : ""
+        }</section>`,
     );
-  } else if (!state.done && !state.readOnly) {
+  } else if (!state.done) {
     parts.push(`<section class="checks"><p>This Step has no Checks.</p><button data-action="markDone">Mark done</button></section>`);
   }
   if (step.run) parts.push(renderRun(step.run));
