@@ -136,7 +136,7 @@ const STEP_HEADING = /^##\s+Step:\s*(.*?)\s*$/;
 const REFLECTION_HEADING = /^##\s+Reflection\s*$/;
 const ANY_H2 = /^##\s/;
 const FENCE_OPEN = /^```(\S*)\s*(.*?)\s*$/;
-const META_LINE = /^(provider|checks|habit|place):\s*(.*?)\s*$/;
+const META_LINE = /^(provider|checks|habit|place|run):\s*(.*?)\s*$/;
 
 interface Section {
   heading: string;
@@ -195,6 +195,7 @@ function parseStep(
   let checks: string[] = [];
   let habit: string | undefined;
   let place: string | undefined;
+  let run: string | undefined;
   let i = 0;
   while (i < before.length && (before[i]!.trim() === "" || META_LINE.test(before[i]!))) {
     const m = META_LINE.exec(before[i]!);
@@ -219,6 +220,11 @@ function parseStep(
           );
         }
         habit = m[2]!;
+      } else if (m[1] === "run") {
+        if (!m[2]) {
+          return fail(file, `Step "${title}": \`run:\` needs a command, like \`run: uv run python main.py\`.`, section.line + i + 1);
+        }
+        run = m[2];
       } else if (m[1] === "place") {
         if (m[2]) place = m[2];
       } else checks = m[2]!.split(",").map((c) => c.trim()).filter(Boolean);
@@ -269,6 +275,7 @@ function parseStep(
   const step: Step = { id: `${lessonId}/${position}`, title, explanation, codeChunk, checks };
   if (provider) step.provider = provider;
   if (habit) step.habit = habit;
+  if (run) step.run = run;
   return { value: step, errors: [] };
 }
 

@@ -151,6 +151,16 @@ describe("Step panel", () => {
     }
   });
 
+  it("shows a Run it button with the command when the Step has a run line, with or without Checks", () => {
+    const runStep: Step = { ...step, run: "uv run python ask.py <x>" };
+    for (const s of [runStep, { ...runStep, checks: ["test_a.py"] }]) {
+      const html = renderPanelControls(s, { done: false, hasNext: true });
+      expect(html).toContain('data-action="runCommand"');
+      expect(html).toContain("Run it: <code>uv run python ask.py &lt;x&gt;</code>");
+    }
+    expect(renderPanelControls(step, { done: false, hasNext: true })).not.toContain("runCommand");
+  });
+
   it("offers Next Step once the Step is done", () => {
     expect(renderPanelControls(withChecks, { done: true, hasNext: true })).toContain('data-action="next"');
   });

@@ -88,3 +88,30 @@ describe("new and edited files", () => {
     expect(text.split("\n")[result.errors[0]!.line! - 1]).toMatch(/^```python file=app\/a\.py/);
   });
 });
+
+describe("run line", () => {
+  const lesson = (meta: string) =>
+    `---\ntitle: L\n---\n\n## Step: Try it\n\n${meta}\n\nExplain.\n\n\`\`\`python file=ask.py\nx = 1\n\`\`\`\n`;
+
+  it("reads a run line into Step.run, with or without Checks", () => {
+    const plain = parseLessonFile("a.md", "a", lesson("run: uv run python ask.py \"hi\""));
+    expect(plain.value!.steps[0]!.run).toBe('uv run python ask.py "hi"');
+    expect(plain.value!.steps[0]!.checks).toEqual([]);
+    const both = parseLessonFile("a.md", "a", lesson("checks: test_a.py\nrun: python ask.py"), {
+      checkFiles: new Set(["test_a.py"]),
+    });
+    expect(both.value!.steps[0]).toMatchObject({ run: "python ask.py", checks: ["test_a.py"] });
+  });
+
+  it("leaves Step.run unset when there is no run line", () => {
+    expect(parseLessonFile("a.md", "a", lesson("")).value!.steps[0]!.run).toBeUndefined();
+  });
+
+  it("reports an empty run line, on that line", () => {
+    const text = lesson("run:");
+    const result = parseLessonFile("a.md", "a", text);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]!.message).toMatch(/run:.*command/);
+    expect(text.split("\n")[result.errors[0]!.line! - 1]).toBe("run:");
+  });
+});

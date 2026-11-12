@@ -48,6 +48,9 @@ export function activate(context: vscode.ExtensionContext): void {
   /** The terminal running Claude Code as the Tutor, reused while it is open. */
   let tutorTerminal: vscode.Terminal | undefined;
   let tutorFolder: string | undefined;
+  /** The terminal that runs Steps' `run:` commands, reused while it is open. */
+  let runTerminal: vscode.Terminal | undefined;
+  let runFolder: string | undefined;
 
   /** Keep the Tutor's copy of the current Step up to date. Silent unless writing fails. */
   const syncCurrentStep = async () => {
@@ -91,6 +94,18 @@ export function activate(context: vscode.ExtensionContext): void {
       }
       tutorTerminal.show();
     }
+  };
+
+  /** Run a Step's command in the "touching grass" terminal in the agent workspace, reusing it while it is open. */
+  const runCommand = (command: string) => {
+    const folder = session?.getWorkspace();
+    if (!folder) return;
+    if (!runTerminal || runTerminal.exitStatus !== undefined || runFolder !== folder) {
+      runTerminal = vscode.window.createTerminal({ name: "touching grass", cwd: folder });
+      runFolder = folder;
+    }
+    runTerminal.show();
+    runTerminal.sendText(command);
   };
 
   /** Wait for progress to reach the workspace, and say so if it could not be saved. */
@@ -173,6 +188,12 @@ export function activate(context: vscode.ExtensionContext): void {
         running = false;
         render();
       }
+    } else if (msg.action === "runCommand" && step.run) {
+      if (!session.getWorkspace() && !(await pickWorkspace())) {
+        message = "Choose your agent workspace to run your code.";
+        return render();
+      }
+      runCommand(step.run);
     } else if (msg.action === "markDone") {
       session.markDone(step.id);
       tree.refresh();
@@ -356,6 +377,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.window.onDidCloseTerminal((t) => {
       if (t === tutorTerminal) tutorTerminal = undefined;
+      if (t === runTerminal) runTerminal = undefined;
     }),
     vscode.window.registerTreeDataProvider("touchingGrass.track", tree),
     registerPasteNudge(() => current),

@@ -76,6 +76,11 @@ export interface PanelState {
 const TUTOR_BUTTON =
   '<section class="tutor"><button class="secondary" data-action="askTutor">Ask Claude about this Step</button></section>';
 
+/** The Run it button for a Step with a `run:` line. Shown with or without Checks. */
+function renderRun(command: string): string {
+  return `<section class="run"><button data-action="runCommand">Run it: <code>${escape(command)}</code></button></section>`;
+}
+
 const pad2 = (n: number) => String(n).padStart(2, "0");
 const localTime = (d: Date) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
 
@@ -109,6 +114,7 @@ export function renderPanelControls(step: Step, state: PanelState): string {
   } else if (!state.done) {
     parts.push(`<section class="checks"><p>This Step has no Checks.</p><button data-action="markDone">Mark done</button></section>`);
   }
+  if (step.run) parts.push(renderRun(step.run));
   if (state.message) parts.push(`<p class="notice">${escape(state.message)}</p>`);
   if (state.done) {
     parts.push(
@@ -140,6 +146,7 @@ export function renderDocument(body: string, nonce: string, cspSource: string): 
   .output { white-space: pre-wrap; }
   .habit-callout { border-left: 3px solid var(--vscode-textLink-foreground); padding: 0.25rem 0.75rem; margin: 1rem 0; }
   .tutor { margin-top: 1.5rem; padding-top: 0.75rem; border-top: 1px solid var(--vscode-panel-border, #8884); }
+  .run { margin: 1rem 0; }
   .reflection-note { opacity: 0.8; font-style: italic; }
 </style></head><body>${body}
 <script nonce="${nonce}">
