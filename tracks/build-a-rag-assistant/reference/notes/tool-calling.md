@@ -1,6 +1,6 @@
 # Tool calling
 
-A language model only produces text. It cannot read a clock, query a database or do reliable arithmetic by itself. Tool calling lets it ask your program to do those things for it.
+A language model only produces text. It cannot read a clock, query a database or do reliable arithmetic by itself. Tool calling lets it ask your program to do those jobs for it.
 
 You describe each tool with a name, a plain-English description and a schema for its arguments. The description matters most, because it is how the model decides whether a tool fits the question.
 
