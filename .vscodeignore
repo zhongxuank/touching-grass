@@ -6,3 +6,5 @@
 !tracks/*/track.md
 !tracks/*/lessons/*.md
 !tracks/*/checks/*.py
+# Reference projects, without compiled Python caches (__pycache__ holds only .pyc files)
+!tracks/*/reference/**/!(*.pyc)

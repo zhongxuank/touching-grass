@@ -5,29 +5,68 @@ import * as path from "node:path";
 export const PROGRESS_DIR = ".touching-grass";
 /** The progress file inside PROGRESS_DIR. */
 export const PROGRESS_FILE = "progress.json";
-export const PROGRESS_VERSION = 1;
+export const PROGRESS_VERSION = 2;
 
-/**
- * What is saved in the Learner workspace. Plain JSON. To add a field (for example `chosenProvider`),
- * add it here, write it in `serializeProgressFile` and read it in `parseProgressFile`.
- */
-export interface ProgressFile {
-  version: number;
-  /** Title of the Track the progress belongs to. */
-  trackTitle: string;
+/** One Track's progress inside the progress file. */
+export interface TrackProgress {
   /** Ids of the Steps whose Checks passed (or that were marked done), in Track order. */
   doneSteps: string[];
   /** The Step the Learner is on. Resume opens it. */
   currentStep?: string;
-  /** Steps that counted as done because the Learner has no key for their Provider. Absent in older files. */
+  /** Steps that counted as done because the Learner has no key for their Provider. */
   skippedSteps?: string[];
-  /** The Provider chosen after the first Provider Lesson. Absent in older files. */
+  /** The Provider chosen after the first Provider Lesson. */
   chosenProvider?: string;
+  /** True once the Learner used "Start from its finished code" for the Track this one builds on. */
+  usedStarter?: boolean;
+}
+
+/**
+ * What is saved in the Learner workspace. Plain JSON: progress for each Track, keyed by Track title, so several
+ * Tracks can share one workspace. To add a per-Track field, add it to `TrackProgress` and read it in `parseTrackProgress`.
+ */
+export interface ProgressFile {
+  version: number;
+  tracks: Record<string, TrackProgress>;
 }
 
 export type ParsedProgress = { ok: true; value: ProgressFile } | { ok: false; reason: string };
 
-/** Reads progress text. Anything that is not a well-formed progress file is rejected with a reason. */
+const isStringList = (v: unknown): v is string[] => Array.isArray(v) && v.every((s) => typeof s === "string");
+
+/** Reads one Track's entry. The same shape in a version 1 file (where it sits at the top) and in version 2. */
+function parseTrackProgress(
+  r: Record<string, unknown>,
+): { ok: true; value: TrackProgress } | { ok: false; reason: string } {
+  if (!isStringList(r.doneSteps)) return { ok: false, reason: "doneSteps is not a list of Step ids" };
+  if (r.currentStep !== undefined && typeof r.currentStep !== "string") {
+    return { ok: false, reason: "currentStep is not a Step id" };
+  }
+  if (r.skippedSteps !== undefined && !isStringList(r.skippedSteps)) {
+    return { ok: false, reason: "skippedSteps is not a list of Step ids" };
+  }
+  if (r.chosenProvider !== undefined && typeof r.chosenProvider !== "string") {
+    return { ok: false, reason: "chosenProvider is not a Provider name" };
+  }
+  if (r.usedStarter !== undefined && typeof r.usedStarter !== "boolean") {
+    return { ok: false, reason: "usedStarter is not true or false" };
+  }
+  return {
+    ok: true,
+    value: {
+      doneSteps: r.doneSteps,
+      ...(r.currentStep !== undefined ? { currentStep: r.currentStep as string } : {}),
+      ...(r.skippedSteps !== undefined ? { skippedSteps: r.skippedSteps as string[] } : {}),
+      ...(r.chosenProvider !== undefined ? { chosenProvider: r.chosenProvider as string } : {}),
+      ...(r.usedStarter !== undefined ? { usedStarter: r.usedStarter as boolean } : {}),
+    },
+  };
+}
+
+/**
+ * Reads progress text. Anything that is not a well-formed progress file is rejected with a reason.
+ * A version 1 file (one Track at the top level) is migrated to a version 2 file holding that one Track.
+ */
 export function parseProgressFile(text: string): ParsedProgress {
   let raw: unknown;
   try {
@@ -37,31 +76,24 @@ export function parseProgressFile(text: string): ParsedProgress {
   }
   if (!raw || typeof raw !== "object") return { ok: false, reason: "not an object" };
   const r = raw as Record<string, unknown>;
+  if (r.version === 1) {
+    if (typeof r.trackTitle !== "string") return { ok: false, reason: "trackTitle is missing" };
+    const entry = parseTrackProgress(r);
+    if (!entry.ok) return entry;
+    return { ok: true, value: { version: PROGRESS_VERSION, tracks: { [r.trackTitle]: entry.value } } };
+  }
   if (r.version !== PROGRESS_VERSION) return { ok: false, reason: `unsupported version ${String(r.version)}` };
-  if (typeof r.trackTitle !== "string") return { ok: false, reason: "trackTitle is missing" };
-  if (!Array.isArray(r.doneSteps) || !r.doneSteps.every((s) => typeof s === "string")) {
-    return { ok: false, reason: "doneSteps is not a list of Step ids" };
+  if (!r.tracks || typeof r.tracks !== "object" || Array.isArray(r.tracks)) {
+    return { ok: false, reason: "tracks is not an object" };
   }
-  if (r.currentStep !== undefined && typeof r.currentStep !== "string") {
-    return { ok: false, reason: "currentStep is not a Step id" };
+  const tracks: Record<string, TrackProgress> = {};
+  for (const [title, value] of Object.entries(r.tracks)) {
+    if (!value || typeof value !== "object") return { ok: false, reason: `the entry for "${title}" is not an object` };
+    const entry = parseTrackProgress(value as Record<string, unknown>);
+    if (!entry.ok) return { ok: false, reason: `${entry.reason} (in "${title}")` };
+    tracks[title] = entry.value;
   }
-  if (r.skippedSteps !== undefined && (!Array.isArray(r.skippedSteps) || !r.skippedSteps.every((s) => typeof s === "string"))) {
-    return { ok: false, reason: "skippedSteps is not a list of Step ids" };
-  }
-  if (r.chosenProvider !== undefined && typeof r.chosenProvider !== "string") {
-    return { ok: false, reason: "chosenProvider is not a Provider name" };
-  }
-  return {
-    ok: true,
-    value: {
-      version: PROGRESS_VERSION,
-      trackTitle: r.trackTitle,
-      doneSteps: r.doneSteps as string[],
-      ...(r.currentStep !== undefined ? { currentStep: r.currentStep as string } : {}),
-      ...(r.skippedSteps !== undefined ? { skippedSteps: r.skippedSteps as string[] } : {}),
-      ...(r.chosenProvider !== undefined ? { chosenProvider: r.chosenProvider as string } : {}),
-    },
-  };
+  return { ok: true, value: { version: PROGRESS_VERSION, tracks } };
 }
 
 export function serializeProgressFile(progress: ProgressFile): string {

@@ -2,6 +2,8 @@ import { promises as fs } from "node:fs";
 import * as path from "node:path";
 import { checkLessonFileList, parseLessonFile, parseTrackFile } from "./parse";
 import { createCheckRunner } from "./checkRunner";
+import { findSiblingTrack, REFERENCE_DIR } from "./buildsOn";
+import { copyReferenceFolder } from "./starter";
 import { isProvider, providersWithKeys, readEnvFile, type EnvReader, type Provider } from "./providers";
 import type { CheckRunner, Lesson, Page, Progress, RunChecksOutcome, Step, Track, ValidationError } from "./types";
 
@@ -20,6 +22,8 @@ export type {
   ValidationError,
 } from "./types";
 export { createCheckRunner } from "./checkRunner";
+export { copyReferenceFolder, type CopyReferenceResult } from "./starter";
+export { findSiblingTrack, REFERENCE_DIR } from "./buildsOn";
 export {
   ENV_FILE,
   isProvider,
@@ -40,6 +44,7 @@ export {
   serializeProgressFile,
   type ProgressFile,
   type ProgressStore,
+  type TrackProgress,
 } from "./progress";
 export {
   CLAUDE_MD,
@@ -54,7 +59,35 @@ export {
   writeTutorGuide,
   type TutorTrackInfo,
 } from "./tutor";
-import { createFileProgressStore, parseProgressFile, PROGRESS_FILE, serializeProgressFile, type ProgressFile, type ProgressStore } from "./progress";
+import {
+  createFileProgressStore,
+  parseProgressFile,
+  PROGRESS_FILE,
+  PROGRESS_VERSION,
+  serializeProgressFile,
+  type ProgressStore,
+  type TrackProgress,
+} from "./progress";
+import type { CopyReferenceResult } from "./starter";
+
+/**
+ * What to tell the Learner about the earlier Track a Track builds on. Absent when the Track builds on nothing,
+ * the earlier Track is finished in this workspace, or the Learner already started from its finished code.
+ */
+export type BuildsOnNotice =
+  /** The earlier Track is not finished: offer "Start from its finished code". */
+  | { state: "unfinished"; title: string }
+  /** No built-in Track has that title: say so, offer no button. */
+  | { state: "missing"; title: string };
+
+/** What `startFromEarlierCode` did. */
+export type StarterOutcome =
+  | { status: "no-workspace" }
+  /** The Track builds on nothing, or the earlier Track cannot be found. */
+  | { status: "missing" }
+  /** The earlier Track has no `reference/` folder to copy. */
+  | { status: "no-reference" }
+  | ({ status: "copied" } & CopyReferenceResult);
 
 /** What opening a workspace found in its progress file. */
 export interface WorkspaceOpenResult {
@@ -71,10 +104,21 @@ export interface TrackSession {
   setWorkspace(folder: string): void;
   getWorkspace(): string | undefined;
   /**
-   * Choose the agent workspace and load its progress file (`.touching-grass/progress.json`), merging it with
-   * progress made so far. Saves the merged progress. A file for another Track, or a corrupt one, is set aside as `.bak`.
+   * Choose the agent workspace and load its progress file (`.touching-grass/progress.json`), merging this Track's
+   * entry with progress made so far. Saves the merged progress, leaving other Tracks' entries as they are. A
+   * corrupt file is set aside as `.bak`. A Track that builds on another takes over its chosen Provider.
    */
   openWorkspace(folder: string, store?: ProgressStore): Promise<WorkspaceOpenResult>;
+  /**
+   * For a Track with `builds_on`: whether to warn that the earlier Track is not finished (or not found). Reads
+   * the workspace's progress for the earlier Track, so call `openWorkspace` first.
+   */
+  getBuildsOn(): Promise<BuildsOnNotice | undefined>;
+  /**
+   * Copy the earlier Track's `reference/` folder into the workspace, never overwriting a file, and record in
+   * progress that the starter was used. Lists the copied and the skipped files.
+   */
+  startFromEarlierCode(): Promise<StarterOutcome>;
   /**
    * Look for Provider keys again (the workspace `.env`, then the process environment) and return the Providers
    * that have one. Presence only: no key value is ever returned. Run Checks and openWorkspace call this too.
@@ -179,8 +223,16 @@ async function listCheckFiles(folder: string): Promise<Set<string>> {
   }
 }
 
+/** Whether a Step shows for the Learner: after a Provider is chosen, Provider Steps for others in later Lessons are hidden. */
+function isStepVisible(track: Track, step: Step, chosen: string | undefined): boolean {
+  if (!chosen || !step.provider || step.provider === chosen) return true;
+  const first = track.lessons.findIndex((l) => l.steps.some((s) => s.provider));
+  return track.lessons.findIndex((l) => l.steps.includes(step)) <= first;
+}
+
 /** Load a Track folder, returning a session or every validation error found. Pure Node: no vscode import. */
-export async function loadTrack(folder: string, options: LoadTrackOptions = {}): Promise<LoadTrackResult> {
+export async function loadTrack(trackFolder: string, options: LoadTrackOptions = {}): Promise<LoadTrackResult> {
+  const folder = trackFolder;
   const trackText = await readText(
     folder,
     TRACK_FILE,
@@ -215,7 +267,12 @@ export async function loadTrack(folder: string, options: LoadTrackOptions = {}):
   }
   if (errors.length) return { ok: false, errors };
 
-  const track: Track = { title: trackFile.value.title, habits: trackFile.value.habits, lessons };
+  const track: Track = {
+    title: trackFile.value.title,
+    habits: trackFile.value.habits,
+    ...(trackFile.value.buildsOn ? { buildsOn: trackFile.value.buildsOn } : {}),
+    lessons,
+  };
   const steps = new Map(lessons.flatMap((l) => l.steps).map((s) => [s.id, s]));
   const order = lessons.flatMap((l) => l.steps);
   const runner = options.checkRunner ?? createCheckRunner();
@@ -227,10 +284,10 @@ export async function loadTrack(folder: string, options: LoadTrackOptions = {}):
   let dotEnv: Record<string, string> = {};
   let chosen: Provider | undefined;
   let held: Step | undefined;
+  let usedStarter = false;
   const lessonOf = new Map(lessons.flatMap((l, i) => l.steps.map((s): [string, number] => [s.id, i])));
   const firstProviderLesson = lessons.findIndex((l) => l.steps.some((s) => s.provider));
-  const visible = (s: Step) =>
-    !chosen || !s.provider || s.provider === chosen || lessonOf.get(s.id)! <= firstProviderLesson;
+  const visible = (s: Step) => isStepVisible(track, s, chosen);
   const pageIdOf = (p: Page) => (p.kind === "step" ? p.step.id : `${p.lesson.id}/reflection`);
   const pageLesson = (p: Page) => (p.kind === "step" ? lessonOf.get(p.step.id)! : lessons.indexOf(p.lesson));
   const pages = (): Page[] =>
@@ -252,26 +309,41 @@ export async function loadTrack(folder: string, options: LoadTrackOptions = {}):
   let saveError: string | undefined;
   const checkFilePath = (name: string) => path.join(folder, CHECKS_DIR, name);
 
-  const snapshot = (): string =>
-    serializeProgressFile({
-      version: 1,
-      trackTitle: track.title,
-      doneSteps: order.filter((s) => done.has(s.id)).map((s) => s.id),
-      currentStep: current,
-      ...(skipped.size ? { skippedSteps: order.filter((s) => skipped.has(s.id)).map((s) => s.id) } : {}),
-      ...(chosen ? { chosenProvider: chosen } : {}),
-    });
-  /** Queue a save of the current progress. Saves run one after another; a failed save is reported by flush(). */
+  /** This Track's entry in the progress file. */
+  const snapshot = (): TrackProgress => ({
+    doneSteps: order.filter((s) => done.has(s.id)).map((s) => s.id),
+    ...(current !== undefined ? { currentStep: current } : {}),
+    ...(skipped.size ? { skippedSteps: order.filter((s) => skipped.has(s.id)).map((s) => s.id) } : {}),
+    ...(chosen ? { chosenProvider: chosen } : {}),
+    ...(usedStarter ? { usedStarter } : {}),
+  });
+  /** Every Track's saved entry in the workspace progress file. Empty when there is no readable file. */
+  const readTracks = async (target: ProgressStore): Promise<Record<string, TrackProgress>> => {
+    const text = await target.read().catch(() => undefined);
+    const parsed = text === undefined ? undefined : parseProgressFile(text);
+    return parsed?.ok ? parsed.value.tracks : {};
+  };
+  /**
+   * Queue a save of the current progress. Saves run one after another; a failed save is reported by flush().
+   * The file is read again each time, so entries of other Tracks in the same workspace are kept.
+   */
   const persist = () => {
     if (!store) return;
-    const text = snapshot();
+    const entry = snapshot();
     const target = store;
     saving = saving
-      .then(() => target.write(text))
+      .then(async () => {
+        const tracks = await readTracks(target);
+        const file = { version: PROGRESS_VERSION, tracks: { ...tracks, [track.title]: entry } };
+        await target.write(serializeProgressFile(file));
+      })
       .catch((e: unknown) => {
         saveError = `${(e as Error).message}`;
       });
   };
+  /** The folder of the earlier Track this one builds on, found next to this Track's folder. */
+  const findEarlier = async (): Promise<string | undefined> =>
+    track.buildsOn ? findSiblingTrack(trackFolder, track.buildsOn) : undefined;
 
   const session: TrackSession = {
     track,
@@ -289,17 +361,15 @@ export async function loadTrack(folder: string, options: LoadTrackOptions = {}):
       } catch (e) {
         notice = `Cannot read the progress file, so starting fresh: ${(e as Error).message}`;
       }
-      let saved: ProgressFile | undefined;
+      let saved: TrackProgress | undefined;
+      let earlier: TrackProgress | undefined;
       if (text !== undefined) {
         const parsed = parseProgressFile(text);
-        const reason = !parsed.ok
-          ? `The progress file is unreadable (${parsed.reason}), so starting fresh.`
-          : parsed.value.trackTitle !== track.title
-            ? `The progress file is for another Track ("${parsed.value.trackTitle}"), so starting fresh.`
-            : undefined;
-        if (parsed.ok && !reason) saved = parsed.value;
-        else {
-          notice = reason;
+        if (parsed.ok) {
+          saved = parsed.value.tracks[track.title];
+          earlier = track.buildsOn ? parsed.value.tracks[track.buildsOn] : undefined;
+        } else {
+          notice = `The progress file is unreadable (${parsed.reason}), so starting fresh.`;
           try {
             await target.setAside();
             notice += ` The old file is saved as ${PROGRESS_FILE}.bak.`;
@@ -313,11 +383,42 @@ export async function loadTrack(folder: string, options: LoadTrackOptions = {}):
       for (const id of saved?.skippedSteps ?? []) if (done.has(id)) skipped.add(id);
       if (saved?.currentStep && ids.has(saved.currentStep)) current = saved.currentStep;
       if (saved?.chosenProvider && isProvider(saved.chosenProvider)) chosen = saved.chosenProvider;
+      // The Provider carries over from the earlier Track, unless the Learner already chose in this one.
+      else if (!chosen && earlier?.chosenProvider && isProvider(earlier.chosenProvider)) chosen = earlier.chosenProvider;
+      if (saved?.usedStarter) usedStarter = true;
       await detect();
       persist();
+      await saving;
       return notice ? { notice } : {};
     },
     getWorkspace: () => workspace,
+    async getBuildsOn() {
+      if (!track.buildsOn || usedStarter) return undefined;
+      const earlierFolder = await findEarlier();
+      if (!earlierFolder) return { state: "missing", title: track.buildsOn };
+      const entry = store ? (await readTracks(store))[track.buildsOn] : undefined;
+      const earlier = await loadTrack(earlierFolder);
+      if (entry && earlier.ok) {
+        const finished = new Set(entry.doneSteps);
+        const shown = earlier.session.track.lessons
+          .flatMap((l) => l.steps)
+          .filter((s) => isStepVisible(earlier.session.track, s, entry.chosenProvider));
+        if (shown.every((s) => finished.has(s.id))) return undefined;
+      }
+      return { state: "unfinished", title: track.buildsOn };
+    },
+    async startFromEarlierCode() {
+      if (!workspace) return { status: "no-workspace" };
+      const earlierFolder = await findEarlier();
+      if (!earlierFolder) return { status: "missing" };
+      const reference = path.join(earlierFolder, REFERENCE_DIR);
+      const isFolder = await fs.stat(reference).then((s) => s.isDirectory(), () => false);
+      if (!isFolder) return { status: "no-reference" };
+      const result = await copyReferenceFolder(reference, workspace);
+      usedStarter = true;
+      persist();
+      return { status: "copied", ...result };
+    },
     detectProviders: detect,
     getAvailableProviders: () => [...available],
     missingProvider: (id) => {

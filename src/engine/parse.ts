@@ -19,6 +19,8 @@ export interface TrackFile {
   title: string;
   habits: string[];
   lessonFiles: string[];
+  /** Title of the Track this one continues, from `builds_on:`. */
+  buildsOn?: string;
 }
 
 type Parsed<T> = { value: T; errors: [] } | { value?: undefined; errors: ValidationError[] };
@@ -125,9 +127,18 @@ export function parseTrackFile(file: string, text: string): Parsed<TrackFile> {
   if (!lessonFiles || lessonFiles.length === 0) {
     errors.push({ file, line: 1, message: "`lessons` must list at least one Lesson file, in order." });
   }
+  const buildsOn = data.builds_on;
+  if (buildsOn !== undefined && buildsOn !== null && (typeof buildsOn !== "string" || !buildsOn.trim())) {
+    errors.push({ file, line: 1, message: "`builds_on` must be the title of another Track, as a string." });
+  }
   if (errors.length) return { errors };
   return {
-    value: { title: (data.title as string).trim(), habits: habits!, lessonFiles: lessonFiles! },
+    value: {
+      title: (data.title as string).trim(),
+      habits: habits!,
+      lessonFiles: lessonFiles!,
+      ...(typeof buildsOn === "string" ? { buildsOn: buildsOn.trim() } : {}),
+    },
     errors: [],
   };
 }
