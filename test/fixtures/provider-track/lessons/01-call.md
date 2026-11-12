@@ -32,3 +32,7 @@ Call OpenAI.
 import os
 KEY = os.environ["OPENAI_API_KEY"]
 ```
+
+## Reflection
+
+- Why does each Provider need its own key?

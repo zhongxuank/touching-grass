@@ -8,8 +8,12 @@ import {
   renderTrackDocument,
   renderTrackHtml,
   renderCodeChunk,
+  pageNav,
+  pageTitle,
+  type PageNav,
 } from "../../src/stepHtml";
-import type { Lesson, Step, Track } from "../../src/engine";
+import * as path from "node:path";
+import { loadTrack, type Lesson, type Step, type Track } from "../../src/engine";
 
 const step: Step = {
   id: "l/1",
@@ -120,7 +124,7 @@ describe("Step panel", () => {
   const withChecks: Step = { ...step, checks: ["test_a.py", "test_b.py"] };
 
   it("has a strict CSP allowing only the nonce'd script", () => {
-    const html = renderPanelDocument(step, { done: false, hasNext: false }, "abc123", "vscode-resource:");
+    const html = renderPanelDocument(step, { done: false }, "abc123", "vscode-resource:");
     expect(html).toContain("default-src 'none'");
     expect(html).toContain("script-src 'nonce-abc123'");
     expect(html).toContain('<script nonce="abc123">');
@@ -129,7 +133,6 @@ describe("Step panel", () => {
   it("lists each Check with its result and failure output, and lets the Learner open it", () => {
     const html = renderPanelControls(withChecks, {
       done: false,
-      hasNext: true,
       results: [
         { check: "test_a.py", passed: true, output: "" },
         { check: "test_b.py", passed: false, output: "assert <1> == 2" },
@@ -138,21 +141,16 @@ describe("Step panel", () => {
     expect(html).toContain('data-action="runChecks"');
     expect(html).toContain('data-action="openCheck" data-check="test_b.py"');
     expect(html).toContain("assert &lt;1&gt; == 2");
-    expect(html).not.toContain("Next Step");
   });
 
   it("offers Ask Claude on every Step, including read-only and keyless ones", () => {
     for (const state of [
-      { done: false, hasNext: true },
-      { done: true, hasNext: true, readOnly: true },
-      { done: false, hasNext: true, noKeyProvider: "openai" },
+      { done: false },
+      { done: true, readOnly: true },
+      { done: false, noKeyProvider: "openai" },
     ]) {
       expect(renderPanelControls(withChecks, state)).toContain('data-action="askTutor"');
     }
-  });
-
-  it("offers Next Step once the Step is done", () => {
-    expect(renderPanelControls(withChecks, { done: true, hasNext: true })).toContain('data-action="next"');
   });
 
   it("gives Reflection and overview panels the same CSP document but no Step controls", () => {
@@ -168,18 +166,16 @@ describe("Step panel", () => {
   });
 
   it("offers Mark done for a Step with no Checks", () => {
-    const html = renderPanelControls(step, { done: false, hasNext: true });
+    const html = renderPanelControls(step, { done: false });
     expect(html).toContain('data-action="markDone"');
     expect(html).not.toContain("Run Checks");
   });
 
-  it("hides Run Checks and Mark done on a read-only done Step, but keeps Next Step", () => {
-    const withChecksHtml = renderPanelControls(withChecks, { done: true, hasNext: true, readOnly: true });
+  it("hides Run Checks and Mark done on a read-only done Step", () => {
+    const withChecksHtml = renderPanelControls(withChecks, { done: true, readOnly: true });
     expect(withChecksHtml).not.toContain("Run Checks");
-    expect(withChecksHtml).toContain('data-action="next"');
-    const noChecksHtml = renderPanelControls(step, { done: true, hasNext: true, readOnly: true });
+    const noChecksHtml = renderPanelControls(step, { done: true, readOnly: true });
     expect(noChecksHtml).not.toContain("markDone");
-    expect(noChecksHtml).toContain('data-action="next"');
   });
 });
 
@@ -187,10 +183,108 @@ describe("read-only Provider Step panel", () => {
   it("says there is no key and offers no Run Checks", () => {
     const html = renderPanelControls(
       { ...step, checks: ["c.py"], provider: "openai" },
-      { done: false, hasNext: true, noKeyProvider: "openai" },
+      { done: false, noKeyProvider: "openai" },
     );
     expect(html).toContain("No key for openai. Read along, your Checks are skipped.");
     expect(html).not.toContain("runChecks");
-    expect(html).toContain('data-action="next"');
+  });
+});
+
+describe("page header and footer", () => {
+  const nav: PageNav = {
+    lessonTitle: "Call <an> LLM",
+    number: "1.5",
+    done: 7,
+    total: 18,
+    previous: { label: "1.4 Read keys" },
+    next: { label: "1.6 Call OpenAI", enabled: false, disabledReason: "Pass the Checks first." },
+  };
+
+  it("shows the Lesson name, the Step number, a progress bar and the done count in a header", () => {
+    const html = renderPanelDocument(step, { done: false, nav }, "n", "csp:");
+    expect(html).toContain("Call &lt;an&gt; LLM");
+    expect(html).toContain("Step 1.5");
+    expect(html).toContain("7 / 18 done");
+    expect(html).toContain('role="progressbar"');
+    expect(html).toContain('aria-valuenow="7"');
+    expect(html).toContain("width:39%");
+    expect(html.indexOf('class="page-bar"')).toBeLessThan(html.indexOf("Say &lt;hello&gt;"));
+  });
+
+  it("has Previous and Next buttons named after the pages, Next disabled with a tooltip until the Step is done", () => {
+    const html = renderPanelDocument(step, { done: false, nav }, "n", "csp:");
+    expect(html).toContain('data-action="previous"');
+    expect(html).toContain("← 1.4 Read keys");
+    expect(html).toMatch(/<button[^>]*data-action="next"[^>]*disabled[^>]*title="Pass the Checks first\."/);
+    expect(html).toContain("1.6 Call OpenAI →");
+    const open = renderPanelDocument(step, { done: true, nav: { ...nav, next: { label: "1.6 Call OpenAI", enabled: true } } }, "n", "csp:");
+    expect(open).not.toMatch(/data-action="next"[^>]*disabled/);
+  });
+
+  it("leaves out Previous on the first page and Next on the last", () => {
+    const html = renderPanelDocument(step, { done: true, nav: { ...nav, previous: undefined, next: undefined } }, "n", "csp:");
+    expect(html).not.toContain('data-action="previous"');
+    expect(html).not.toContain('data-action="next"');
+  });
+
+  it("adds no header or footer without navigation data, and keeps the strict CSP", () => {
+    const html = renderPanelDocument(step, { done: false }, "n", "csp:");
+    expect(html).not.toContain('class="page-bar"');
+    expect(html).toContain("script-src 'nonce-n'");
+  });
+
+  it("uses VS Code's own button colours", () => {
+    const html = renderPanelDocument(step, { done: false, nav }, "n", "csp:");
+    for (const v of ["--vscode-button-background", "--vscode-button-foreground", "--vscode-button-secondaryBackground"]) {
+      expect(html).toContain(v);
+    }
+  });
+
+  it("gives the Reflection page the same header and footer", () => {
+    const lesson: Lesson = { id: "l", title: "L", intro: "", steps: [step], reflection: ["Why?"] };
+    const html = renderReflectionDocument(lesson, "n", "csp:", { ...nav, number: "Reflection" });
+    expect(html).toContain('class="page-bar"');
+    expect(html).toContain("7 / 18 done");
+    expect(html).toContain('data-action="previous"');
+    expect(html).not.toContain("Step Reflection");
+    expect(html).toContain("Reflection");
+  });
+});
+
+describe("pageNav and pageTitle from a session", () => {
+  const load = async () => {
+    const result = await loadTrack(path.join(__dirname, "..", "fixtures", "provider-track"), {
+      readEnv: async () => ({}),
+      processEnv: {},
+    });
+    if (!result.ok) throw new Error("fixture");
+    return result.session;
+  };
+
+  it("names neighbours by number and title, and says why Next is disabled", async () => {
+    const session = await load();
+    const nav = pageNav(session, "01-call/1")!;
+    expect(nav).toMatchObject({ lessonTitle: "Call an LLM", number: "1.1", done: 0, total: 6 });
+    expect(nav.previous).toBeUndefined();
+    expect(nav.next).toMatchObject({ label: "1.2 Call Claude", enabled: false });
+    expect(nav.next?.disabledReason).toMatch(/Mark/);
+    session.markDone("01-call/1");
+    expect(pageNav(session, "01-call/1")!.next).toMatchObject({ enabled: true });
+    expect(pageNav(session, "01-call/2")!.previous?.label).toBe("1.1 Set up");
+  });
+
+  it("links the last Step to the Reflection, and the Reflection to the next Lesson", async () => {
+    const session = await load();
+    expect(pageNav(session, "01-call/3")!.next?.label).toBe("Reflection");
+    const nav = pageNav(session, "01-call/reflection")!;
+    expect(nav).toMatchObject({ number: "Reflection", lessonTitle: "Call an LLM" });
+    expect(nav.previous?.label).toBe("1.3 Call OpenAI");
+    expect(nav.next).toMatchObject({ label: "2.1 Claude again", enabled: true });
+  });
+
+  it("titles panels with the number, and Reflection panels with their Lesson", async () => {
+    const session = await load();
+    expect(pageTitle(session, "01-call/3")).toBe("1.3 Call OpenAI");
+    expect(pageTitle(session, "01-call/reflection")).toBe("Reflection: Call an LLM");
   });
 });

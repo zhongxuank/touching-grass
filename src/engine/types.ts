@@ -45,6 +45,9 @@ export interface Track {
   lessons: Lesson[];
 }
 
+/** A page of the Track's sequence the Learner moves through: a Step, or a Lesson's Reflection after its last Step. */
+export type Page = { kind: "step"; step: Step } | { kind: "reflection"; lesson: Lesson };
+
 /** One problem in a Track folder, named by file (relative to the Track folder) and, when known, line. */
 export interface ValidationError {
   file: string;
