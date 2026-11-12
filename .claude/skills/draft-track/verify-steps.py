@@ -11,9 +11,14 @@ read the other Provider Steps without typing them. Run all scenarios with
 --all-providers. API keys are removed from the environment, so Checks that
 need a key must skip.
 
+A Track with `builds_on: <title>` in track.md starts every workspace from the
+`reference/` of the sibling Track with that title (the project the Learner
+already has), then adds Code Chunks 1..N on top.
+
 Usage: python3 -I verify-steps.py <track> [--provider NAME | --all-providers]
 Needs uv on PATH.
 """
+import glob
 import os
 import re
 import shutil
@@ -23,6 +28,21 @@ import tempfile
 
 PROVIDERS = ["claude", "openai", "openrouter"]
 KEYS = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "LLM_PROVIDER"]
+
+
+def base_reference(track):
+    """The reference of the Track named by `builds_on:` in track.md, or None."""
+    head = open(os.path.join(track, "track.md")).read().split("---")[1]
+    m = re.search(r"^builds_on:\s*(.+?)\s*$", head, re.M)
+    if not m:
+        return None
+    wanted = m.group(1).strip("\"'")
+    parent = os.path.dirname(os.path.abspath(track))
+    for other in sorted(glob.glob(os.path.join(parent, "*", "track.md"))):
+        title = re.search(r"^title:\s*(.+?)\s*$", open(other).read().split("---")[1], re.M)
+        if title and title.group(1).strip("\"'") == wanted:
+            return os.path.join(os.path.dirname(other), "reference")
+    sys.exit(f"builds_on: no Track titled {wanted!r} next to {track}")
 
 
 def read_steps(track):
@@ -52,10 +72,13 @@ def run_scenario(track, steps, provider):
     scenario = [s for s in steps if s["provider"] in (None, provider)] if provider else steps
     env = {k: v for k, v in os.environ.items() if k not in KEYS}
     failed = 0
+    base = base_reference(track)
     print(f"== scenario: {provider or 'every Step'}")
     for n, step in enumerate(scenario):
         ws = tempfile.mkdtemp(prefix="verify-")
         try:
+            if base:
+                shutil.copytree(base, ws, dirs_exist_ok=True, ignore=shutil.ignore_patterns(".venv", "__pycache__", "uv.lock"))
             for earlier in scenario[: n + 1]:
                 dest = os.path.join(ws, earlier["file"])
                 os.makedirs(os.path.dirname(dest), exist_ok=True)
@@ -87,7 +110,9 @@ def main():
         sys.exit(__doc__)
     track = args[0]
     steps = read_steps(track)
-    if "--all-providers" in args:
+    if "--all-providers" in args and not any(s["provider"] for s in steps):
+        scenarios = [None]  # no Provider Steps of its own, so one replay covers it
+    elif "--all-providers" in args:
         scenarios = [None] + PROVIDERS
     elif "--provider" in args:
         scenarios = [args[args.index("--provider") + 1]]
