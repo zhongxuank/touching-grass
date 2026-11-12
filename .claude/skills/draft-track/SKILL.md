@@ -25,7 +25,7 @@ Plan before writing a file, and show the Learner the outline (Lessons, Step titl
 
 ### Building on an earlier Track
 
-A Track may continue another one (for example a RAG Track that extends the agents Track's project). Set `builds_on: <earlier Track title>` in `track.md`, with the title exactly as the earlier Track's `title`. The new Track must extend that Track's `reference/` project in the same workspace, not re-teach it: skip its setup Steps, treat its files as existing (give a Step that changes one a `place:` line, though the validator only enforces that for files this Track created; its Checks may import them), and start from where its last Lesson ended. Read the earlier Track's `reference/` folder before planning. See Builds on in `docs/track-format.md`.
+A Track may continue another one (for example a RAG Track that extends the agents Track's project). Set `builds_on: <earlier Track title>` in `track.md`, with the title exactly as the earlier Track's `title`. The new Track must extend that Track's `reference/` project in the same workspace, not re-teach it: skip its setup Steps, treat its files as existing (give a Step that changes one a `place:` line, though the validator only enforces that for files this Track created; its Checks may import them), and start from where its last Lesson ended. Read the earlier Track's `reference/` folder before planning. See Builds on in `docs/track-format.md`. `extract-reference.py` and `verify-steps.py` read `builds_on`, find the sibling Track by title, and start the reference and every verification workspace from its `reference/`, so this Track's Checks run against the full project.
 
 ### Setup Steps (Python)
 
