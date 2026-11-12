@@ -15,6 +15,7 @@ import { showValidationErrors } from "./diagnostics";
 import { registerPasteNudge } from "./pasteNudge";
 import { renderPanelDocument, renderReflectionDocument, renderTrackDocument, type PanelState } from "./stepHtml";
 import { TrackTree } from "./trackTree";
+import { parseTutorOpenMode, routeTutor, type ContributedCommand } from "./tutorLaunch";
 
 /** globalState key: agent workspace path -> the Track folder last used in it. */
 const TRACK_BY_WORKSPACE = "touchingGrass.trackByWorkspace";
@@ -56,16 +57,31 @@ export function activate(context: vscode.ExtensionContext): void {
     if (error) void vscode.window.showWarningMessage(error);
   };
 
-  /** Open Claude Code in the agent workspace, asking about the current Step. */
-  const askTutor = () => {
+  /**
+   * Ask Claude about the current Step: copy the question to the Claude Code extension's chat, or run Claude Code
+   * in a terminal, as the touchingGrass.tutor.open setting says.
+   */
+  const askTutor = async () => {
     const folder = session?.getWorkspace();
     if (!folder) return;
-    if (!tutorTerminal || tutorTerminal.exitStatus !== undefined || tutorFolder !== folder) {
-      tutorTerminal = vscode.window.createTerminal({ name: "Claude tutor", cwd: folder });
-      tutorFolder = folder;
-      tutorTerminal.sendText(`claude "${TUTOR_PROMPT}"`);
+    const mode = parseTutorOpenMode(vscode.workspace.getConfiguration("touchingGrass.tutor").get("open"));
+    const claude = vscode.extensions.getExtension("anthropic.claude-code");
+    const claudeCommands = claude ? ((claude.packageJSON?.contributes?.commands as ContributedCommand[]) ?? []) : undefined;
+    const route = routeTutor(mode, claudeCommands);
+    if (route.kind === "error") {
+      void vscode.window.showErrorMessage(route.message);
+    } else if (route.kind === "extension") {
+      await vscode.env.clipboard.writeText(TUTOR_PROMPT);
+      await vscode.commands.executeCommand(route.command);
+      void vscode.window.showInformationMessage("Question copied. Paste it into Claude.");
+    } else {
+      if (!tutorTerminal || tutorTerminal.exitStatus !== undefined || tutorFolder !== folder) {
+        tutorTerminal = vscode.window.createTerminal({ name: "Claude tutor", cwd: folder });
+        tutorFolder = folder;
+        tutorTerminal.sendText(`claude "${TUTOR_PROMPT}"`);
+      }
+      tutorTerminal.show();
     }
-    tutorTerminal.show();
   };
 
   /** Wait for progress to reach the workspace, and say so if it could not be saved. */
@@ -165,7 +181,7 @@ export function activate(context: vscode.ExtensionContext): void {
         return render();
       }
       await syncCurrentStep();
-      askTutor();
+      await askTutor();
     } else if (msg.action === "openCheck" && msg.check && step.checks.includes(msg.check)) {
       await vscode.window.showTextDocument(vscode.Uri.file(session.checkFilePath(msg.check)), {
         viewColumn: vscode.ViewColumn.One,
