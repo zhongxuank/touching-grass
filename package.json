@@ -1,10 +1,10 @@
 {
   "name": "touching-grass",
   "displayName": "touching grass",
-  "description": "Walks a Learner through building real things by hand, one Step at a time.",
-  "version": "0.0.1",
+  "description": "Learn to build AI agents by typing the code yourself, one Step at a time, with visible Checks.",
+  "version": "0.1.0",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "MIT",
   "publisher": "touching-grass",
   "engines": {
     "vscode": "^1.90.0"
@@ -105,7 +105,7 @@
     "test:smoke": "npm run build && vscode-test",
     "validate-track": "node dist/validate.js",
     "watch": "node esbuild.mjs --watch",
-    "package": "npm run build && vsce package --no-dependencies --allow-missing-repository --skip-license -o touching-grass.vsix"
+    "package": "npm run build && vsce package --no-dependencies -o touching-grass.vsix"
   },
   "dependencies": {
     "markdown-it": "^14.1.0",
@@ -128,5 +128,18 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/zhongxuank/touching-grass"
+  },
+  "keywords": [
+    "ai-agents",
+    "learning",
+    "education",
+    "llm",
+    "rag",
+    "python",
+    "tutorial"
+  ],
+  "homepage": "https://github.com/zhongxuank/touching-grass#readme",
+  "bugs": {
+    "url": "https://github.com/zhongxuank/touching-grass/issues"
   }
 }
