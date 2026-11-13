@@ -17,6 +17,7 @@ import * as path from "node:path";
 import { showValidationErrors } from "./diagnostics";
 import { registerPasteNudge } from "./pasteNudge";
 import {
+  describeCopyOutcome,
   describeStarterOutcome,
   pageNav,
   pageTitle,
@@ -242,6 +243,13 @@ export function activate(context: vscode.ExtensionContext): void {
         running = false;
         render();
       }
+    } else if (msg.action === "copyFiles" && step.copy) {
+      if (!session.getWorkspace() && !(await pickWorkspace())) {
+        message = describeCopyOutcome({ status: "no-workspace" });
+        return render();
+      }
+      message = describeCopyOutcome(await session.copyStepFiles(step.id));
+      render();
     } else if (msg.action === "runCommand" && step.run) {
       if (!session.getWorkspace() && !(await pickWorkspace())) {
         message = "Choose your agent workspace to run your code.";

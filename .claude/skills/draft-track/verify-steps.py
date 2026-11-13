@@ -13,7 +13,8 @@ need a key must skip.
 
 A Track with `builds_on: <title>` in track.md starts every workspace from the
 `reference/` of the sibling Track with that title (the project the Learner
-already has), then adds Code Chunks 1..N on top.
+already has), then adds Code Chunks 1..N on top. A Step's `copy: <Track folder> -> <workspace folder>` line is
+applied too, like the Learner pressing the button.
 
 Usage: python3 -I verify-steps.py <track> [--provider NAME | --all-providers]
 Needs uv on PATH.
@@ -55,8 +56,10 @@ def read_steps(track):
             provider = re.search(r"^provider:\s*(\S+)", section, re.M)
             checks = re.search(r"^checks:\s*(.+)$", section, re.M)
             chunk = re.search(r"```\w+ file=(\S+)\n(.*?)```", section, re.S)
+            copy = re.search(r"^copy:\s*(.+?)\s*->\s*(.+?)\s*$", section, re.M)
             steps.append(
                 {
+                    "copy": (copy.group(1), copy.group(2)) if copy else None,
                     "id": f"{os.path.basename(lesson)[:-3]}/{position}",
                     "title": title,
                     "provider": provider.group(1) if provider else None,
@@ -80,6 +83,9 @@ def run_scenario(track, steps, provider):
             if base:
                 shutil.copytree(base, ws, dirs_exist_ok=True, ignore=shutil.ignore_patterns(".venv", "__pycache__", "uv.lock"))
             for earlier in scenario[: n + 1]:
+                if earlier["copy"]:  # the button's files, as the Learner would have copied them
+                    src = os.path.join(track, earlier["copy"][0])
+                    shutil.copytree(src, os.path.join(ws, earlier["copy"][1]), dirs_exist_ok=True)
                 dest = os.path.join(ws, earlier["file"])
                 os.makedirs(os.path.dirname(dest), exist_ok=True)
                 open(dest, "w").write(earlier["code"])

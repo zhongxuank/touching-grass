@@ -12,9 +12,9 @@ Embedding every chunk is the slow, expensive part, so you also save the results 
 ## Step: Add the embedding dependencies
 
 run: uv sync
-place: Replace the whole file. The project name, the three existing dependencies and the pytest setting stay as they were; `numpy` and `fastembed` are new
+place: Replace the whole file. The project name, the four existing dependencies (including `pypdf` from Lesson 1) and the pytest setting stay as they were; `numpy` and `fastembed` are new
 
-Two new libraries. `fastembed` runs the embedding model on your CPU. `numpy` does fast maths on whole lists of numbers at once; `fastembed` needs it anyway, and you use it for the similarity maths. Everything else in the file stays as the agents Track left it: the SDKs, `python-dotenv` and the pytest setting that lets Checks import your code.
+Two new libraries. `fastembed` runs the embedding model on your CPU. `numpy` does fast maths on whole lists of numbers at once; `fastembed` needs it anyway, and you use it for the similarity maths. Everything else in the file stays as it was: the SDKs, `python-dotenv`, `pypdf` from Lesson 1 and the pytest setting that lets Checks import your code.
 
 After you type it, press the Run it button (`uv sync`), which installs the new libraries into the project's virtual environment.
 
@@ -27,6 +27,7 @@ dependencies = [
     "anthropic>=0.40",
     "openai>=1.50",
     "python-dotenv>=1.0",
+    "pypdf>=5",
     "numpy>=1.26",
     "fastembed>=0.4",
 ]

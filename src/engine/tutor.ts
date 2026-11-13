@@ -63,6 +63,9 @@ export function renderCurrentStep(step: Step, results?: CheckResult[]): string {
     step.codeChunk.place ? `- Where: ${step.codeChunk.place}` : undefined,
     step.provider ? `- Provider: ${step.provider}` : undefined,
     step.habit ? `- Habit: ${step.habit}` : undefined,
+    step.copy
+      ? `- Copy: the files in the Track's \`${step.copy.from}\` folder are copied into \`${step.copy.to}\` in this project by a button in the Step panel, so the Learner does not type them`
+      : undefined,
     step.run ? `- Run: \`${step.run}\`` : undefined,
     step.checks.length ? `- Checks: ${step.checks.map((c) => `\`${c}\``).join(", ")}` : "- Checks: none",
   ].filter((line) => line !== undefined);
