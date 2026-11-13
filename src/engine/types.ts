@@ -12,6 +12,14 @@ export interface CodeChunk {
   place?: string;
 }
 
+/** Files a Step puts in the Learner's workspace for them, from its `copy:` line. */
+export interface StepCopy {
+  /** Folder in the Track folder, relative to it, `/` separators. Always exists when the Track loads. */
+  from: string;
+  /** Folder in the Learner's agent workspace, relative to it, `/` separators. Never leaves the workspace. */
+  to: string;
+}
+
 export interface Step {
   /** `<lesson id>/<1-based position>`, stable while Steps keep their order. */
   id: string;
@@ -27,6 +35,8 @@ export interface Step {
   habit?: string;
   /** A shell command the Learner runs in the agent workspace to see their code work, from the `run:` line. */
   run?: string;
+  /** A folder of the Track copied into the Learner's workspace by a button, from the `copy:` line. */
+  copy?: StepCopy;
 }
 
 export interface Lesson {
