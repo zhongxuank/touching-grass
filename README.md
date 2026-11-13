@@ -65,6 +65,8 @@ Read each Step's explanation, type the Code Chunk into the file it names, and pr
 
 When you finish a Track, start the next one in the same folder: press the **Open Track** button (the book icon) at the top of the Track sidebar and pick it. The Tracks build one project in order: **build-an-agent**, then **build-a-rag-assistant**, then **build-a-chatbot**. Your progress in each Track is kept, so you can switch back at any time.
 
+To go through a Track again, open the **...** menu at the top of the Track sidebar and pick **Reset Progress in This Track**. It only resets the Steps' progress: your code files stay as they are, and other Tracks keep their progress.
+
 ### 5. Ask Claude when you are stuck (optional)
 
 Press **Ask Claude about this Step** at the bottom of any Step. How it opens is set by `touchingGrass.tutor.open`:
