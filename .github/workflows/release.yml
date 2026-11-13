@@ -1,0 +1,27 @@
+name: Release
+
+# Publishing a GitHub Release builds touching-grass.vsix and attaches it to that Release,
+# so newcomers can install without Node.js.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  vsix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run package
+      - name: Attach the .vsix to the Release
+        run: gh release upload "${{ github.event.release.tag_name }}" touching-grass.vsix --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
