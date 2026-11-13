@@ -388,10 +388,14 @@ export function activate(context: vscode.ExtensionContext): void {
     if (builtIn.length) {
       const choice = await vscode.window.showQuickPick(
         [
-          ...builtIn.map((f) => ({ label: path.basename(f), description: "built in", folder: f as string | undefined })),
+          ...builtIn.map((f) => ({
+            label: path.basename(f),
+            description: f === trackFolder ? "built in, open now" : "built in",
+            folder: f as string | undefined,
+          })),
           { label: "Browse for a Track folder...", description: "", folder: undefined },
         ],
-        { title: "Open Track" },
+        { title: "Open Track", placeHolder: "Pick a Track. Your progress in each Track is kept." },
       );
       if (!choice) return undefined;
       if (choice.folder) return choice.folder;

@@ -21,7 +21,8 @@
       {
         "command": "touchingGrass.openTrack",
         "title": "Open Track",
-        "category": "Touching Grass"
+        "category": "Touching Grass",
+        "icon": "$(library)"
       },
       {
         "command": "touchingGrass.validateTrack",
@@ -76,6 +77,15 @@
           "description": "How \"Ask Claude about this Step\" opens the Tutor."
         }
       }
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "touchingGrass.openTrack",
+          "when": "view == touchingGrass.track",
+          "group": "navigation"
+        }
+      ]
     }
   },
   "scripts": {
