@@ -7,5 +7,7 @@
 !tracks/*/track.md
 !tracks/*/lessons/*.md
 !tracks/*/checks/*.py
+# Files a Step's `copy:` line puts in the Learner's project
+!tracks/*/assets/**
 # Reference projects, without compiled Python caches (__pycache__ holds only .pyc files)
 !tracks/*/reference/**/!(*.pyc)

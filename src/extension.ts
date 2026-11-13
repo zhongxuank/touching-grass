@@ -17,6 +17,7 @@ import * as path from "node:path";
 import { showValidationErrors } from "./diagnostics";
 import { registerPasteNudge } from "./pasteNudge";
 import {
+  describeCopyOutcome,
   describeStarterOutcome,
   pageNav,
   pageTitle,
@@ -242,6 +243,13 @@ export function activate(context: vscode.ExtensionContext): void {
         running = false;
         render();
       }
+    } else if (msg.action === "copyFiles" && step.copy) {
+      if (!session.getWorkspace() && !(await pickWorkspace())) {
+        message = describeCopyOutcome({ status: "no-workspace" });
+        return render();
+      }
+      message = describeCopyOutcome(await session.copyStepFiles(step.id));
+      render();
     } else if (msg.action === "runCommand" && step.run) {
       if (!session.getWorkspace() && !(await pickWorkspace())) {
         message = "Choose your agent workspace to run your code.";
@@ -460,6 +468,26 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("touchingGrass.openTrack", async (folder?: vscode.Uri) => {
       const picked = folder?.fsPath ?? (await pickTrack());
       return picked ? openTrackAt(picked) : undefined;
+    }),
+    vscode.commands.registerCommand("touchingGrass.resetProgress", async () => {
+      if (!session) {
+        void vscode.window.showInformationMessage("Open a Track first.");
+        return;
+      }
+      const title = session.track.title;
+      const answer = await vscode.window.showWarningMessage(
+        `Reset your progress in "${title}"?`,
+        {
+          modal: true,
+          detail: "Every Step goes back to not done and you start at Step 1.1. Your code files are not changed, and other Tracks keep their progress.",
+        },
+        "Reset progress",
+      );
+      if (answer !== "Reset progress") return;
+      session.resetProgress();
+      tree.refresh();
+      await saveProgress();
+      resume();
     }),
     vscode.commands.registerCommand("touchingGrass.chooseWorkspace", async () => {
       if (!session) {

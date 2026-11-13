@@ -1,5 +1,5 @@
 import MarkdownIt from "markdown-it";
-import type { BuildsOnNotice, CodeChunk, Lesson, Page, StarterOutcome, Step, Track, TrackSession } from "./engine";
+import type { BuildsOnNotice, CodeChunk, CopyFilesOutcome, StepCopy, Lesson, Page, StarterOutcome, Step, Track, TrackSession } from "./engine";
 
 const md = new MarkdownIt({ html: false, linkify: false });
 
@@ -15,7 +15,7 @@ export function renderStepHtml(step: Step): string {
     ? `\n<aside class="habit-callout">Habit: <strong>${escape(step.habit)}</strong></aside>`
     : "";
   return `<h1>${escape(step.title)}</h1>
-<section class="explanation">${md.render(step.explanation)}</section>${callout}
+<section class="explanation">${md.render(step.explanation)}</section>${callout}${step.copy ? `\n${renderCopy(step.copy)}` : ""}
 ${renderCodeChunk(step.codeChunk)}`;
 }
 
@@ -34,6 +34,26 @@ export function renderCodeChunk(chunk: CodeChunk): string {
 ${notes.map((n) => `<p class="chunk-where">${n}</p>`).join("\n")}
 <pre><code>${escape(chunk.code)}</code></pre>
 </section>`;
+}
+
+/** The Copy the files button for a Step with a `copy:` line: says what is copied and where it goes. */
+export function renderCopy(copy: StepCopy): string {
+  return `<section class="copy"><button data-action="copyFiles">Copy the files</button>
+<p>Copies the files in the Track's <code>${escape(copy.from)}</code> folder into <code>${escape(copy.to)}</code> in your project. A file that is already there is never overwritten.</p></section>`;
+}
+
+/** What to tell the Learner after "Copy the files": "3 copied, 0 already there". */
+export function describeCopyOutcome(outcome: CopyFilesOutcome): string {
+  switch (outcome.status) {
+    case "no-workspace":
+      return "Choose your agent workspace to copy the files into.";
+    case "nothing-to-copy":
+      return "This Step has no files to copy.";
+    case "copied": {
+      const summary = `${outcome.copied.length} copied, ${outcome.skipped.length} already there.`;
+      return `${summary} Files are in ${outcome.to}/.`;
+    }
+  }
 }
 
 /** Body of the Reflection panel for a Lesson: ungraded, optional questions, rendered as Markdown. */
@@ -245,6 +265,8 @@ export function renderDocument(body: string, nonce: string, cspSource: string, n
   .builds-on { border-left: 3px solid var(--vscode-editorWarning-foreground, #c90); padding: 0.25rem 0.75rem; margin: 0 0 1rem; }
   .tutor { margin-top: 1.5rem; padding-top: 0.75rem; border-top: 1px solid var(--vscode-panel-border, #8884); }
   .run { margin: 1rem 0; }
+  .copy { margin: 1rem 0; }
+  .copy p { margin: 0.4rem 0 0; }
   .reflection-note { opacity: 0.8; font-style: italic; }
   .page-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 1rem; padding: 0.6rem 0; margin-bottom: 0.5rem; border-bottom: 1px solid var(--vscode-panel-border, #8884); }
   .page-bar .crumb { color: var(--vscode-descriptionForeground); }

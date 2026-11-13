@@ -1,56 +1,112 @@
 ---
 title: Retrieval by hand
 ---
-Retrieval-augmented generation starts with one plain problem: you have some text, someone asks a question, and you have to find the few passages that answer it. In this Lesson you solve that with no AI at all. You write a small set of notes, load them, cut them into **chunks**, and rank the chunks by how many of the question's words they contain.
+Retrieval-augmented generation starts with one plain problem: you have some documents, someone asks a question, and you have to find the few passages that answer it. In this Lesson you solve that with no AI at all. You turn three PDF articles into Markdown notes, load the notes, cut them into **chunks**, and rank the chunks by how many of the question's words they contain.
 
-Doing it by hand first matters. Every later improvement in this Track (embeddings, a threshold, an evaluation) is an answer to something you will see go wrong here.
+Real documents rarely arrive as tidy text files. They are PDFs, web pages and exports, and the first job of any RAG system is getting the text out of them. So you start there: a button copies three PDFs into your project (they are articles about how LLM agents work), and you write the code that reads them and saves clean notes.
 
-A **chunk** is one small piece of a document, kept together with where it came from: the file name (its **source**) and its **position** in that file. Search works on chunks, not whole files, because a prompt has limited room and a short passage is easier to match than a long file.
+Doing the search by hand first matters. Every later improvement in this Track (embeddings, a threshold, an evaluation) is an answer to something you will see go wrong here.
 
-Your project already holds the agent from the previous Track. This Lesson adds a `notes/` folder with the text to search and a `rag/` folder with the new code. Nothing in `agent/` changes yet.
+A **chunk** is one small piece of a document, kept together with where it came from: the file name (its **source**) and its **position** in that file. Search works on chunks, not whole files, because a prompt has limited room and a short passage is easier to match than a long file. The articles are a few pages each, so each one becomes a dozen or more chunks.
 
-## Step: Write a note about the agent loop
+Your project already holds the agent from the previous Track. This Lesson adds a `sources/` folder with the PDFs, a `notes/` folder with the text made from them, and a `rag/` folder with the new code. Nothing in `agent/` changes yet.
 
-You need something to search. These three notes are about how LLM agents work, so you can check the answers yourself: each question you ask later has one note that clearly answers it. Type this one into a new `notes/` folder.
+## Step: Add pypdf and copy the articles
 
-Each note is a few short paragraphs separated by a blank line. The blank lines matter: the code you write in a few Steps treats each paragraph as one chunk. The `#` title line is only a heading for you as a reader, and the chunking code skips it.
+copy: assets/pdfs -> sources
+run: uv sync
+place: Replace the whole file. The project name, the three existing dependencies and the pytest setting stay as they were; `pypdf` is new
 
-```markdown file=notes/agent-loop.md
-# The agent loop
+Two jobs in one Step, and neither needs much typing.
 
-An AI agent is a loop around a language model, and this cycle is called the agent loop. Each round, the program sends the conversation so far to the model and reads what comes back.
+First, the files. Press the **Copy the files** button in this panel. It copies the three PDFs (`agent-loop.pdf`, `tool-calling.pdf` and `context-window.pdf`) from the Track into a new `sources/` folder in your project. It never overwrites a file you already have, so pressing it twice is safe. In a real project this folder would hold your own documents, and you would drop them in yourself.
 
-If the reply is a request to use a tool, the program runs that tool, adds the result to the conversation, and goes round again. If the reply is plain text, the loop ends and that text is the final answer.
+Second, the library. `pypdf` is a pure Python library that reads PDF files and pulls the text out of them. Type the new `pyproject.toml` below, with `pypdf>=5` added to the dependencies. Everything else in the file stays as the agents Track left it: the SDKs, `python-dotenv` and the pytest setting that lets Checks import your code. Then press the Run it button (`uv sync`), which installs `pypdf` into the project's virtual environment.
 
-Every loop needs a step limit. A confused model can keep asking for tools forever, so the program counts the rounds and stops with an error after a fixed number, such as five.
+```toml file=pyproject.toml
+[project]
+name = "mini-agent"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "anthropic>=0.40",
+    "openai>=1.50",
+    "python-dotenv>=1.0",
+    "pypdf>=5",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
 ```
 
-## Step: Write a note about tool calling
+## Step: Turn the PDFs into notes
 
-The second note. Same shape: a title, then short paragraphs separated by blank lines. Type it into `notes/` next to the first.
+checks: test_convert.py
+run: uv run python -m rag.convert
 
-```markdown file=notes/tool-calling.md
-# Tool calling
+A PDF is made for printing, not for reading by a program. It describes where each line of text sits on a page, so the text you get back is full of artefacts of the layout. This file reads every PDF in `sources/` and writes a clean Markdown **note** for each one into `notes/`.
 
-A language model only produces text. It cannot read a clock, query a database or do reliable arithmetic by itself. Tool calling lets it ask your program to do those jobs for it.
+- `pdf_text` opens a PDF with `PdfReader` and asks each page for its text. `extraction_mode="layout"` keeps the gaps between paragraphs as blank lines, which the plain mode throws away. The pages are joined with a blank line.
+- `clean` does the tidying, in three moves. First, a regular expression joins words the PDF broke across two lines with a hyphen (`instruc-` at the end of a line, `tion` at the start of the next becomes `instruction`). Second, it splits the text into blocks at blank lines and joins the wrapped lines of each block into one line, because a paragraph is one idea, not one line of a page. Third, it drops the page footer (`Page 2`) and marks headings.
+- `is_heading` is a guess, and a good example of cleaning real documents: a line that is short and does not end in punctuation is probably a heading. The first heading is the article's title and becomes `# Title`; the others become `## Heading`. In the next Steps the chunking code skips lines that start with `#`, so a heading never counts as a passage.
+- `convert_all` does this for every `.pdf` in the folder and writes `notes/<name>.md`, named after the PDF. It raises a clear error if the `sources/` folder is missing, in the same spirit as the notes loader you write soon. `Path.mkdir(exist_ok=True)` makes `notes/` if it is not there yet.
+- `main` prints each file it wrote. `if __name__ == "__main__"` lets you run the file as a module, and lets a Check import it without running it.
 
-You describe each tool with a name, a plain-English description and a schema for its arguments. The description matters most, because it is how the model decides whether a tool fits the question.
+Cleaning text is never perfect. A real hyphenated word, such as "open-source", would be joined wrongly if it happened to break at the hyphen, and a heading that ends with a full stop would not be spotted. For learning documents like these, a simple rule that mostly works is the right trade. In a real project you would look at the notes the code writes and adjust the rules to fit your documents.
 
-The model never runs a tool. It only replies with the tool name and the arguments, and your code decides whether and how to run it. The result goes back to the model as a new message tagged with the id of the request it answers.
-```
+Press the Run it button. It should print three lines, one per note. Then open `notes/agent-loop.md` and read it: a title, a few headings, and paragraphs separated by blank lines. This is the text the rest of the Lesson searches.
 
-## Step: Write a note about the context window
+```python file=rag/convert.py
+import re
+from pathlib import Path
 
-The third note. It is the one the later Lessons use to show where keyword search falls short, so type it as it is: notice that it says "lengthy conversation" and "no longer knows", not "forget".
+from pypdf import PdfReader
 
-```markdown file=notes/context-window.md
-# The context window
 
-A model can only read a limited amount of text at once. That limit is the context window, and it is measured in tokens, where a token is about three quarters of a word.
+def pdf_text(path: Path) -> str:
+    reader = PdfReader(path)
+    return "\n\n".join(page.extract_text(extraction_mode="layout") for page in reader.pages)
 
-The prompt, the conversation history, the tool results and the reply all share the window. When a lengthy conversation fills it, the oldest messages must be dropped or summarised, so the model no longer knows what happened at the start.
 
-Retrieval is one way to cope. Instead of pasting every document into the prompt, the program searches for the few passages that matter and sends only those.
+def is_heading(line: str) -> bool:
+    return len(line) < 60 and not line.endswith((".", ",", ":", ";", "!", "?"))
+
+
+def clean(text: str) -> str:
+    text = re.sub(r"(\w)-[ \t]*\n[ \t]*(\w)", r"\1\2", text)
+    pieces = []
+    for block in re.split(r"\n\s*\n", text):
+        lines = [" ".join(line.split()) for line in block.splitlines() if line.strip()]
+        if not lines or re.fullmatch(r"Page \d+", lines[0]):
+            continue
+        if is_heading(lines[0]):
+            level = "#" if not pieces else "##"
+            pieces.append(f"{level} {lines.pop(0)}")
+        if lines:
+            pieces.append(" ".join(lines))
+    return "\n\n".join(pieces) + "\n"
+
+
+def convert_all(sources: str = "sources", notes: str = "notes") -> list[Path]:
+    folder = Path(sources)
+    if not folder.is_dir():
+        raise FileNotFoundError(f"No sources folder at {folder}. Copy the PDFs there first.")
+    Path(notes).mkdir(exist_ok=True)
+    written = []
+    for pdf in sorted(folder.glob("*.pdf")):
+        target = Path(notes) / f"{pdf.stem}.md"
+        target.write_text(clean(pdf_text(pdf)), encoding="utf-8")
+        written.append(target)
+    return written
+
+
+def main() -> None:
+    for path in convert_all():
+        print(f"Wrote {path}")
+
+
+if __name__ == "__main__":
+    main()
 ```
 
 ## Step: Cut text into chunks
@@ -62,11 +118,11 @@ This file defines the two small data types the whole Track passes around, and th
 
 - `Chunk` is one piece of a note: `source` (the file name), `position` (its number within that file, starting at 0) and `text`. `@dataclass(frozen=True)` makes Python write the boilerplate for you (the constructor and `==`), and `frozen` means a chunk can never be changed after it is made, which keeps it safe to pass around.
 - `Hit` is a chunk that a search found, with its `score`: a number saying how well it matches the question. You use it from the next Steps on.
-- `split_text` does the cutting. It splits the text on blank lines (`"\n\n"`) into paragraphs, and `" ".join(paragraph.split())` tidies the whitespace by turning any run of spaces and newlines into a single space. It skips empty paragraphs and the `#` title line, because a title on its own answers nothing.
-- A long paragraph is split further, at sentence ends, so no chunk is longer than `max_chars` characters. `re.split(r"(?<=[.!?])\s+", paragraph)` cuts after a `.`, `!` or `?` that is followed by whitespace. The loop packs sentences into `current` until adding the next one would go over the limit, then starts a new chunk.
+- `split_text` does the cutting. It splits the text on blank lines (`"\n\n"`) into paragraphs, and `" ".join(paragraph.split())` tidies the whitespace by turning any run of spaces and newlines into a single space. It skips empty paragraphs and every line that starts with `#`, the title and headings your converter wrote, because a heading on its own answers nothing.
+- A long paragraph is split further, at sentence ends, so no chunk is longer than `max_chars` characters. The articles you converted have paragraphs of a few hundred characters, and some are a little over the default of 500, so you will see a few of them cut in two. `re.split(r"(?<=[.!?])\s+", paragraph)` cuts after a `.`, `!` or `?` that is followed by whitespace. The loop packs sentences into `current` until adding the next one would go over the limit, then starts a new chunk.
 - `format_hit` turns a `Hit` into one printable line. You use it in the scripts that show search results.
 
-This is the **Keep chunks small** Habit. A small chunk matches one idea, and the model later gets only the relevant passage, not a whole file. A chunk that is too large hides the answer in noise, and one that is too small loses the context around it.
+This is the **Keep chunks small** Habit. A small chunk matches one idea, and the model later gets only the relevant passage, not a whole file. With articles this size the habit matters: a whole article is about a thousand words, and only a paragraph of it answers any one question. A chunk that is too large hides the answer in noise, and one that is too small loses the context around it.
 
 ```python file=rag/chunks.py
 import re
@@ -111,7 +167,7 @@ def format_hit(hit: Hit) -> str:
 
 checks: test_notes.py
 
-`load_chunks` reads every `.md` file in a folder and returns all their chunks in one list.
+`load_chunks` reads every `.md` file in a folder and returns all their chunks in one list. Here the folder is `notes/`, the Markdown your converter wrote.
 
 `Path(folder).glob("*.md")` lists the Markdown files, and `sorted(...)` puts them in a fixed order, so the chunks come out the same every time (the saved index in the next Lesson relies on that). `read_text(encoding="utf-8")` reads a file as text. `enumerate(texts)` counts the paragraphs from 0, which becomes each chunk's `position`. `path.name` is just the file name, like `agent-loop.md`, which is what you will later cite as the source.
 
@@ -178,9 +234,9 @@ habit: Commit after each Lesson
 
 This script puts the pieces together so you can see retrieval working with no AI. It loads the chunks, prints how many there are, runs `keyword_search`, and prints each hit with `format_hit` (score, file, position, start of the text). `sys.argv[1:]` holds the words typed after the file name, and `or` falls back to a default question. As in the agents Track, `main()` plus `if __name__ == "__main__"` lets a Check import the file without running it.
 
-Press the Run it button. You should see the chunks about the agent loop at the top. Then try a few of your own questions: `"Why does the assistant forget things said long ago?"` finds nothing at all, although the context window note answers it. Keep that question: Lesson 2 fixes it.
+Press the Run it button. The first line says how many chunks the three notes made (about 45, more or fewer if you changed `max_chars`). Below it you should see the chunks about the agent loop at the top, each with its score, its file and its position. Then try a few of your own questions: `"Why does the assistant forget things said long ago?"` finds nothing at all, although the context window note answers it. Keep that question: Lesson 2 fixes it.
 
-Once it works, commit this Lesson so git records what it added. In the terminal, from your project folder, run `git add -A && git commit -m "RAG Lesson 1: retrieval by hand"`. `git add -A` stages every change, and `.env` stays out because it is ignored. Pushing to a private GitHub repo is optional.
+Once it works, commit this Lesson so git records what it added. In the terminal, from your project folder, run `git add -A && git commit -m "RAG Lesson 1: retrieval by hand"`. `git add -A` stages every change, and `.env` stays out because it is ignored. Both `sources/` and `notes/` are committed on purpose: the PDFs are your input and the notes are small text files you can read in a diff, so a teammate who clones the project can search straight away. In a project with big or private documents you would add `sources/` to `.gitignore` instead, and rebuild `notes/` by running the converter. Pushing to a private GitHub repo is optional.
 
 ```python file=try_keywords.py
 import sys
@@ -209,4 +265,5 @@ if __name__ == "__main__":
 ## Reflection
 
 - Why search over small chunks with a source and a position, instead of whole files?
+- Your converter guessed which lines were headings and which were page furniture. What would go wrong with a document it did not expect, and how would you notice?
 - Keyword search found nothing for a question the notes do answer. What exactly is it missing, and what would a search need to understand to get it right?

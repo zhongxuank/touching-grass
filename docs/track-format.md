@@ -86,6 +86,7 @@ A `## Step: <title>` section. In order:
    - `checks: <file>, <file>` lists the Check files the Step needs, by name, relative to the Track's `checks/` folder. Exposed as `Step.checks` and run by Run Checks (see Checks below). A Step with no `checks:` line has no Checks; the Learner marks it done by hand. A name that is not a file in `checks/` is a validation error.
    - `place: <text>` says where the code goes in a file an earlier Step created, for example `place: Replace the whole file. The imports are new`. Required for such a Step, or the Track fails validation. Inline Markdown is allowed. Exposed as `CodeChunk.place`.
    - `run: <command>` is a shell command the Learner runs to see their code work, for example `run: uv run python main.py`. It must not be empty. Exposed as `Step.run`. The panel shows a "Run it: <command>" button that sends the command to a terminal named "touching grass" in the agent workspace (the terminal is reused while it is open; the panel asks for the workspace if none is chosen). A Step may have `run:` with or without `checks:`, and the Tutor's `current-step.md` lists it.
+   - `copy: <track folder> -> <workspace folder>` has the player copy a folder of files that ship with the Track into the Learner's workspace, for example `copy: assets/pdfs -> sources`. Use it for input the Learner should not type, such as documents to process. Both sides must be non-empty relative folders with no `..`, and the Track folder must exist inside the Track (a missing one is a validation error naming the file and line). Exposed as `Step.copy` (`{ from, to }`). The panel shows a **Copy the files** button next to the Code Chunk, saying what it copies and where. Pressing it copies every file (subfolders included), creates folders as needed, never overwrites a file that is already there, and reports "N copied, M already there". The Tutor's `current-step.md` lists it. Ship the files in the extension (`.vscodeignore` has `tracks/*/assets/**`). A Step may have `copy:` with `run:` and `checks:`, and still needs its Code Chunk.
    - `habit: <name>` names the Track Habit the Step's Code Chunk models. The name must match one of the Track's `habits` exactly, or the Track fails validation. Shown as a callout between the explanation and the Code Chunk.
 2. The explanation (Markdown, required). Shown first.
 3. Exactly one fenced Code Chunk whose info string is `<language> file=<path>`, where `<path>` is the target file in the Learner's agent project. The Code Chunk must have code in it: an empty fence is a validation error.
@@ -158,7 +159,9 @@ interface TrackSession {
   openStep(stepId: string): Step | undefined; // open in the panel; an unfinished Step becomes current
   getProgress(): Progress;                   // { doneSteps: string[], currentStep?: string }
   getBuildsOn(): Promise<BuildsOnNotice | undefined>;  // notice for a Track with `builds_on` whose earlier Track is unfinished or missing
-  startFromEarlierCode(): Promise<StarterOutcome>;     // copy the earlier Track's reference/ without overwriting; { status: "copied", copied, skipped }
+  startFromEarlierCode(): Promise<StarterOutcome>;
+  copyStepFiles(stepId: string): Promise<CopyFilesOutcome>; // run a Step's copy: line, never overwriting; { status: "copied", to, copied, skipped }
+  resetProgress(): void;                     // this Track back to Step 1, nothing done; files untouched
   flush(): Promise<string | undefined>;      // wait for saves; a message if one failed
 }
 ```

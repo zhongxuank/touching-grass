@@ -25,6 +25,11 @@
         "icon": "$(library)"
       },
       {
+        "command": "touchingGrass.resetProgress",
+        "title": "Reset Progress in This Track",
+        "category": "Touching Grass"
+      },
+      {
         "command": "touchingGrass.validateTrack",
         "title": "Validate Track",
         "category": "Touching Grass"
@@ -84,6 +89,11 @@
           "command": "touchingGrass.openTrack",
           "when": "view == touchingGrass.track",
           "group": "navigation"
+        },
+        {
+          "command": "touchingGrass.resetProgress",
+          "when": "view == touchingGrass.track",
+          "group": "1_progress"
         }
       ]
     }

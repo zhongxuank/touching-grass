@@ -44,7 +44,7 @@ checks: test_answer.py
 - Otherwise it calls `ask_fn(prompt, system=SYSTEM)`. `ask_fn` defaults to the real `ask()`, but a Check passes in a fake one, so no key is needed. `list(dict.fromkeys(...))` removes repeated file names while keeping their order, giving the list of sources used.
 - It returns an `Answer`, a small dataclass holding the text, the sources and the best score, so a caller can show all three.
 
-`MIN_SCORE` is a starting guess, not a fact. Different embedding models spread their scores differently, so the right cut-off has to be found by looking at real scores. You do that in the next Step: ask a question the notes answer and one they do not, and move the number between the two. A threshold you never tested is a bug waiting to happen.
+`MIN_SCORE` is a starting guess, not a fact. Different embedding models spread their scores differently, so the right cut-off has to be found by looking at real scores. You do that in the next Step: ask a question the notes answer and one they do not, and move the number between the two. Chunks cut from longer articles are wordier than short examples, so scores depend on your notes as much as on the model. A threshold you never tested is a bug waiting to happen.
 
 ```python file=rag/answer.py
 import logging
@@ -217,7 +217,7 @@ habit: Measure retrieval
 
 How do you know retrieval works? Right now you have looked at three or four examples. An **evaluation** replaces looking with measuring: a fixed list of questions, each with the note that should answer it, and a score for how often search finds that note.
 
-- `EVAL_CASES` holds `(question, expected note)` pairs. The first five use plain words from the notes. The last one is the "forget" question that keyword search could not answer. Add your own pairs as you write more notes.
+- `EVAL_CASES` holds `(question, expected note)` pairs. The first five use plain words from the notes. The last one is the "forget" question that keyword search could not answer. Add your own pairs as you add more documents.
 - `hit_rate(find, cases)` takes any function `find(question)` that returns hits, so the same measurement works for both kinds of search. For each case it checks whether the expected file is among the sources found, and it returns the fraction found: 1.0 means every question found its note.
 - `main` builds the index and prints the hit rate for keyword search and for embedding search, keeping only the top 2 chunks each. `python -m rag.evaluate` runs this file as a module, which is what lets `if __name__ == "__main__"` work for a file inside the `rag` folder.
 

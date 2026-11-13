@@ -1,9 +1,9 @@
-import { promises as fs } from "node:fs";
+import { promises as fs, statSync } from "node:fs";
 import * as path from "node:path";
 import { checkLessonFileList, parseLessonFile, parseTrackFile } from "./parse";
 import { createCheckRunner } from "./checkRunner";
 import { findSiblingTrack, REFERENCE_DIR } from "./buildsOn";
-import { copyReferenceFolder } from "./starter";
+import { copyFolderInto, copyReferenceFolder } from "./starter";
 import { isProvider, providersWithKeys, readEnvFile, type EnvReader, type Provider } from "./providers";
 import type { CheckRunner, Lesson, Page, Progress, RunChecksOutcome, Step, Track, ValidationError } from "./types";
 
@@ -18,11 +18,12 @@ export type {
   Progress,
   RunChecksOutcome,
   Step,
+  StepCopy,
   Track,
   ValidationError,
 } from "./types";
 export { createCheckRunner } from "./checkRunner";
-export { copyReferenceFolder, type CopyReferenceResult } from "./starter";
+export { copyFolderInto, copyReferenceFolder, type CopyReferenceResult } from "./starter";
 export { findSiblingTrack, REFERENCE_DIR } from "./buildsOn";
 export {
   ENV_FILE,
@@ -89,6 +90,13 @@ export type StarterOutcome =
   | { status: "no-reference" }
   | ({ status: "copied" } & CopyReferenceResult);
 
+/** What `copyStepFiles` did. */
+export type CopyFilesOutcome =
+  | { status: "no-workspace" }
+  /** The Step has no `copy:` line, or its Track folder is gone. */
+  | { status: "nothing-to-copy" }
+  | ({ status: "copied"; to: string } & CopyReferenceResult);
+
 /** What opening a workspace found in its progress file. */
 export interface WorkspaceOpenResult {
   /** Set when the existing file was ignored or set aside, so the Learner can be told why. */
@@ -119,6 +127,11 @@ export interface TrackSession {
    * progress that the starter was used. Lists the copied and the skipped files.
    */
   startFromEarlierCode(): Promise<StarterOutcome>;
+  /**
+   * Run a Step's `copy:` line: copy every file of its Track folder into its workspace folder, creating folders
+   * as needed and never overwriting a file. Lists the copied and the skipped files (relative to the target).
+   */
+  copyStepFiles(stepId: string): Promise<CopyFilesOutcome>;
   /**
    * Look for Provider keys again (the workspace `.env`, then the process environment) and return the Providers
    * that have one. Presence only: no key value is ever returned. Run Checks and openWorkspace call this too.
@@ -182,6 +195,11 @@ export interface TrackSession {
    * A done Step is opened read-only and leaves the current Step where it is.
    */
   openStep(stepId: string): Step | undefined;
+  /**
+   * Start this Track again: no Step done or skipped, no Provider chosen, back at the first Step. Saves it.
+   * Other Tracks' progress and the Learner's files stay as they are.
+   */
+  resetProgress(): void;
   /** Wait for pending saves. Resolves with a message if a save failed, otherwise undefined. */
   flush(): Promise<string | undefined>;
 }
@@ -230,6 +248,14 @@ function isStepVisible(track: Track, step: Step, chosen: string | undefined): bo
   return track.lessons.findIndex((l) => l.steps.includes(step)) <= first;
 }
 
+function isDirectory(p: string): boolean {
+  try {
+    return statSync(p).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 /** Load a Track folder, returning a session or every validation error found. Pure Node: no vscode import. */
 export async function loadTrack(trackFolder: string, options: LoadTrackOptions = {}): Promise<LoadTrackResult> {
   const folder = trackFolder;
@@ -261,7 +287,12 @@ export async function loadTrack(trackFolder: string, options: LoadTrackOptions =
       continue;
     }
     const id = path.basename(rel, path.extname(rel));
-    const lesson = parseLessonFile(rel, id, text, { checkFiles, habits: trackFile.value.habits, seenFiles });
+    const lesson = parseLessonFile(rel, id, text, {
+      checkFiles,
+      habits: trackFile.value.habits,
+      seenFiles,
+      folderExists: (relative) => isDirectory(path.join(folder, ...relative.split("/"))),
+    });
     if (lesson.value) lessons.push(lesson.value);
     else errors.push(...lesson.errors);
   }
@@ -407,6 +438,16 @@ export async function loadTrack(trackFolder: string, options: LoadTrackOptions =
       }
       return { state: "unfinished", title: track.buildsOn };
     },
+    async copyStepFiles(stepId) {
+      const copy = steps.get(stepId)?.copy;
+      if (!copy) return { status: "nothing-to-copy" };
+      if (!workspace) return { status: "no-workspace" };
+      const source = path.join(folder, ...copy.from.split("/"));
+      const isFolder = await fs.stat(source).then((s) => s.isDirectory(), () => false);
+      if (!isFolder) return { status: "nothing-to-copy" };
+      const result = await copyFolderInto(source, path.join(workspace, ...copy.to.split("/")));
+      return { status: "copied", to: copy.to, ...result };
+    },
     async startFromEarlierCode() {
       if (!workspace) return { status: "no-workspace" };
       const earlierFolder = await findEarlier();
@@ -475,6 +516,14 @@ export async function loadTrack(trackFolder: string, options: LoadTrackOptions =
       return true;
     },
     isDone: (id) => done.has(id),
+    resetProgress() {
+      done.clear();
+      skipped.clear();
+      chosen = undefined;
+      held = undefined;
+      current = order[0]?.id;
+      persist();
+    },
     advance(stepId) {
       const step = steps.get(stepId);
       if (!step) return undefined;

@@ -36,7 +36,7 @@ The Tracks come with the extension. They build one Python project, in order, so 
 | Track | What you build | Lessons |
 | --- | --- | --- |
 | **Build an AI agent from scratch** | Call Claude, OpenAI or OpenRouter with the official SDKs, add retries, then give the model tools and write the agent loop yourself | Call an LLM, Tool calling (19 Steps) |
-| **Build a RAG assistant** | Search your own notes by keyword, then by meaning with local embeddings, then answer with cited sources and a `search_notes` tool | Retrieval by hand, Embeddings, Answer with sources (22 Steps) |
+| **Build a RAG assistant** | Turn three PDF articles (they come with the Track) into notes, search them by keyword, then by meaning with local embeddings, then answer with cited sources and a `search_notes` tool | Retrieval by hand, Embeddings, Answer with sources (21 Steps) |
 | **Build a chatbot** | A Streamlit chat page on top of your agent, with streaming replies, settings and visible tool calls | A chat page, Streaming and settings, Tools in the chat (21 Steps) |
 
 You can also write your own Track: see [Write your own Track](#write-your-own-track).
@@ -120,6 +120,8 @@ Then repeat: read the Step, type the Code Chunk into the file it names, press **
 
 When you finish a Track, start the next one in the same folder with the **Open Track** button (the book icon) at the top of the Track sidebar. Your progress in each Track is kept, so you can switch back at any time.
 
+To go through a Track again, open the **...** menu at the top of the Track sidebar and pick **Reset Progress in This Track**. It only resets the Steps' progress: your code files stay as they are, and other Tracks keep their progress.
+
 ## Ask Claude when you are stuck (optional)
 
 Press **Ask Claude about this Step** at the bottom of any Step. Claude Code opens in your project folder with the Step you are on and your last Check results, and acts as a tutor, not a pair programmer: it explains, points to the cause of a failing Check, and gives a hint before a fix. It is told never to type the Code Chunk for you or to show the values in `.env`.
@@ -144,7 +146,7 @@ It also adds one line, `@.touching-grass/tutor.md`, to `CLAUDE.md` in your proje
 
 ## Write your own Track
 
-A Track is plain Markdown plus pytest files, so you can read, edit and review every word. The format is in [docs/track-format.md](docs/track-format.md).
+A Track is plain Markdown plus pytest files, so you can read, edit and review every word. A Step can also give the Learner a **Run it** button for a command, or a **Copy the files** button for input they should not type, such as the RAG Track's PDFs. The format is in [docs/track-format.md](docs/track-format.md).
 
 To draft one, run the project skill in [Claude Code](https://code.claude.com/docs) from a clone of this repo:
 
