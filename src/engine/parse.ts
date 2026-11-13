@@ -1,7 +1,7 @@
 import * as path from "node:path";
 import { parse as parseYaml } from "yaml";
 import { isProvider, PROVIDERS } from "./providers";
-import type { CodeChunk, Lesson, Step, ValidationError } from "./types";
+import type { CodeChunk, Lesson, Step, StepCopy, ValidationError } from "./types";
 
 export interface ParseLessonOptions {
   /** Check files that exist in the Track's `checks/` folder, relative to it. Omit to skip the check. */
@@ -13,6 +13,8 @@ export interface ParseLessonOptions {
    * same set to each Lesson in turn. Decides whether a Code Chunk creates a new file. Defaults to an empty set.
    */
   seenFiles?: Set<string>;
+  /** Whether a folder (relative to the Track folder) exists, for a Step's `copy:` source. Omit to skip the check. */
+  folderExists?: (relativeFolder: string) => boolean;
 }
 
 export interface TrackFile {
@@ -147,7 +149,7 @@ const STEP_HEADING = /^##\s+Step:\s*(.*?)\s*$/;
 const REFLECTION_HEADING = /^##\s+Reflection\s*$/;
 const ANY_H2 = /^##\s/;
 const FENCE_OPEN = /^```(\S*)\s*(.*?)\s*$/;
-const META_LINE = /^(provider|checks|habit|place|run):\s*(.*?)\s*$/;
+const META_LINE = /^(provider|checks|habit|place|run|copy):\s*(.*?)\s*$/;
 
 interface Section {
   heading: string;
@@ -172,6 +174,17 @@ function splitSections(body: string[], bodyStart: number) {
     }
   });
   return { intro: intro.join("\n").trim(), sections };
+}
+
+/** A folder path from a `copy:` line, normalised, or a message saying why it is not allowed. */
+function copyFolder(raw: string, what: string): { folder: string } | { error: string } {
+  if (!raw) return { error: `the ${what} folder is empty.` };
+  if (raw.startsWith("/") || raw.startsWith("\\") || /^[a-zA-Z]:/.test(raw)) {
+    return { error: `the ${what} folder "${raw}" must be relative, not an absolute path.` };
+  }
+  if (raw.split(/[\\/]/).includes("..")) return { error: `the ${what} folder "${raw}" must not contain "..".` };
+  const folder = path.posix.normalize(raw.replace(/\\/g, "/")).replace(/\/$/, "");
+  return { folder: folder || "." };
 }
 
 function parseStep(
@@ -207,6 +220,7 @@ function parseStep(
   let habit: string | undefined;
   let place: string | undefined;
   let run: string | undefined;
+  let copy: StepCopy | undefined;
   let i = 0;
   while (i < before.length && (before[i]!.trim() === "" || META_LINE.test(before[i]!))) {
     const m = META_LINE.exec(before[i]!);
@@ -236,6 +250,23 @@ function parseStep(
           return fail(file, `Step "${title}": \`run:\` needs a command, like \`run: uv run python main.py\`.`, section.line + i + 1);
         }
         run = m[2];
+      } else if (m[1] === "copy") {
+        const line = section.line + i + 1;
+        const usage = "`copy:` is written like `copy: assets/pdfs -> sources` (a Track folder, then a workspace folder).";
+        const parts = m[2]!.split("->");
+        if (parts.length !== 2) return fail(file, `Step "${title}": ${usage}`, line);
+        const from = copyFolder(parts[0]!.trim(), "Track");
+        if ("error" in from) return fail(file, `Step "${title}": \`copy:\` ${from.error} ${usage}`, line);
+        const to = copyFolder(parts[1]!.trim(), "workspace");
+        if ("error" in to) return fail(file, `Step "${title}": \`copy:\` ${to.error} ${usage}`, line);
+        if (options.folderExists && !options.folderExists(from.folder)) {
+          return fail(
+            file,
+            `Step "${title}": \`copy:\` names the Track folder "${from.folder}", but it does not exist in the Track. Create it and put the files to copy in it, or fix the name.`,
+            line,
+          );
+        }
+        copy = { from: from.folder, to: to.folder };
       } else if (m[1] === "place") {
         if (m[2]) place = m[2];
       } else checks = m[2]!.split(",").map((c) => c.trim()).filter(Boolean);
@@ -287,6 +318,7 @@ function parseStep(
   if (provider) step.provider = provider;
   if (habit) step.habit = habit;
   if (run) step.run = run;
+  if (copy) step.copy = copy;
   return { value: step, errors: [] };
 }
 

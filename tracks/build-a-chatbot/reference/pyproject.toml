@@ -6,6 +6,7 @@ dependencies = [
     "anthropic>=0.40",
     "openai>=1.50",
     "python-dotenv>=1.0",
+    "pypdf>=5",
     "numpy>=1.26",
     "fastembed>=0.4",
     "streamlit>=1.40",

@@ -24,16 +24,17 @@ async function listFiles(root: string, rel = ""): Promise<string[]> {
 }
 
 /**
- * Copy a Track's `reference/` folder into the Learner's workspace without overwriting: a file that already
- * exists there is skipped, and reported so the Learner can see what was left alone.
+ * Copy every file of `sourceFolder` into `targetFolder` without overwriting: a file that already exists there is
+ * skipped, and reported so the Learner can see what was left alone. Folders are created as needed. The result's
+ * paths are relative to the two folders.
  */
-export async function copyReferenceFolder(referenceFolder: string, workspace: string): Promise<CopyReferenceResult> {
+export async function copyFolderInto(sourceFolder: string, targetFolder: string): Promise<CopyReferenceResult> {
   const result: CopyReferenceResult = { copied: [], skipped: [] };
-  for (const rel of await listFiles(referenceFolder)) {
-    const target = path.join(workspace, ...rel.split("/"));
+  for (const rel of await listFiles(sourceFolder)) {
+    const target = path.join(targetFolder, ...rel.split("/"));
     await fs.mkdir(path.dirname(target), { recursive: true });
     try {
-      await fs.copyFile(path.join(referenceFolder, ...rel.split("/")), target, constants.COPYFILE_EXCL);
+      await fs.copyFile(path.join(sourceFolder, ...rel.split("/")), target, constants.COPYFILE_EXCL);
       result.copied.push(rel);
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
@@ -41,4 +42,9 @@ export async function copyReferenceFolder(referenceFolder: string, workspace: st
     }
   }
   return result;
+}
+
+/** Copy a Track's `reference/` folder into the Learner's workspace, never overwriting. See `copyFolderInto`. */
+export function copyReferenceFolder(referenceFolder: string, workspace: string): Promise<CopyReferenceResult> {
+  return copyFolderInto(referenceFolder, workspace);
 }

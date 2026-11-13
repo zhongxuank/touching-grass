@@ -3,6 +3,9 @@ from pathlib import Path
 from rag.chunks import Chunk, Hit
 from rag.evaluate import EVAL_CASES, hit_rate
 
+# The notes the Learner's converter makes from the PDFs that ship with the Track.
+BUNDLED = Path(__file__).resolve().parent.parent / "assets" / "pdfs"
+
 CASES = [("q1", "a.md"), ("q2", "b.md"), ("q3", "a.md"), ("q4", "b.md")]
 
 
@@ -19,7 +22,7 @@ def test_hit_rate_is_the_share_of_questions_whose_note_was_found():
 
 def test_the_evaluation_has_several_cases_that_point_at_real_notes():
     assert len(EVAL_CASES) >= 5
-    notes = {path.name for path in Path("notes").glob("*.md")}
+    notes = {f"{path.stem}.md" for path in BUNDLED.glob("*.pdf")}
     for question, expected in EVAL_CASES:
         assert question.strip()
         assert expected in notes
