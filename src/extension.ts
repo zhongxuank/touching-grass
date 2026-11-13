@@ -461,6 +461,26 @@ export function activate(context: vscode.ExtensionContext): void {
       const picked = folder?.fsPath ?? (await pickTrack());
       return picked ? openTrackAt(picked) : undefined;
     }),
+    vscode.commands.registerCommand("touchingGrass.resetProgress", async () => {
+      if (!session) {
+        void vscode.window.showInformationMessage("Open a Track first.");
+        return;
+      }
+      const title = session.track.title;
+      const answer = await vscode.window.showWarningMessage(
+        `Reset your progress in "${title}"?`,
+        {
+          modal: true,
+          detail: "Every Step goes back to not done and you start at Step 1.1. Your code files are not changed, and other Tracks keep their progress.",
+        },
+        "Reset progress",
+      );
+      if (answer !== "Reset progress") return;
+      session.resetProgress();
+      tree.refresh();
+      await saveProgress();
+      resume();
+    }),
     vscode.commands.registerCommand("touchingGrass.chooseWorkspace", async () => {
       if (!session) {
         void vscode.window.showErrorMessage("Open a Track first.");

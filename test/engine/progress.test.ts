@@ -80,6 +80,25 @@ describe("saving and loading progress", () => {
   });
 });
 
+describe("resetting a Track", () => {
+  it("clears this Track's progress, saves it, and keeps other Tracks' entries", async () => {
+    const other = { doneSteps: ["01-a/1"], currentStep: "01-a/2" };
+    const { store } = memoryStore(JSON.stringify({ version: 2, tracks: { "Other Track": other } }));
+    const session = await load();
+    await session.openWorkspace(workspace, store);
+    session.markDone(NO_CHECKS);
+    session.openStep(WITH_CHECKS);
+    session.resetProgress();
+    expect(await session.flush()).toBeUndefined();
+
+    expect(session.isDone(NO_CHECKS)).toBe(false);
+    expect(session.getCurrentStep()).toBe(NO_CHECKS);
+    const saved = JSON.parse((await store.read())!);
+    expect(saved.tracks["Fixture Track"]).toEqual({ doneSteps: [], currentStep: NO_CHECKS });
+    expect(saved.tracks["Other Track"]).toEqual(other);
+  });
+});
+
 describe("resuming", () => {
   it("resumes at the first Step of a new Track", async () => {
     const session = await load();

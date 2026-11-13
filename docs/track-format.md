@@ -159,6 +159,7 @@ interface TrackSession {
   getProgress(): Progress;                   // { doneSteps: string[], currentStep?: string }
   getBuildsOn(): Promise<BuildsOnNotice | undefined>;  // notice for a Track with `builds_on` whose earlier Track is unfinished or missing
   startFromEarlierCode(): Promise<StarterOutcome>;     // copy the earlier Track's reference/ without overwriting; { status: "copied", copied, skipped }
+  resetProgress(): void;                     // this Track back to Step 1, nothing done; files untouched
   flush(): Promise<string | undefined>;      // wait for saves; a message if one failed
 }
 ```
