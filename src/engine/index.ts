@@ -182,6 +182,11 @@ export interface TrackSession {
    * A done Step is opened read-only and leaves the current Step where it is.
    */
   openStep(stepId: string): Step | undefined;
+  /**
+   * Start this Track again: no Step done or skipped, no Provider chosen, back at the first Step. Saves it.
+   * Other Tracks' progress and the Learner's files stay as they are.
+   */
+  resetProgress(): void;
   /** Wait for pending saves. Resolves with a message if a save failed, otherwise undefined. */
   flush(): Promise<string | undefined>;
 }
@@ -475,6 +480,14 @@ export async function loadTrack(trackFolder: string, options: LoadTrackOptions =
       return true;
     },
     isDone: (id) => done.has(id),
+    resetProgress() {
+      done.clear();
+      skipped.clear();
+      chosen = undefined;
+      held = undefined;
+      current = order[0]?.id;
+      persist();
+    },
     advance(stepId) {
       const step = steps.get(stepId);
       if (!step) return undefined;
