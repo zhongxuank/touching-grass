@@ -67,7 +67,7 @@ code --install-extension touching-grass.vsix
 Or, in VS Code, open the command palette (Ctrl+Shift+P, or Cmd+Shift+P on macOS) and run **Extensions: Install from VSIX...**. If `code` is not found, run **Shell Command: Install 'code' command in PATH** from the command palette first.
 
 <details>
-<summary>Build it from source instead (needs Node.js 20+)</summary>
+<summary>Build it from source instead (needs Node.js 22+)</summary>
 
 ```sh
 git clone https://github.com/zhongxuank/touching-grass
@@ -158,7 +158,7 @@ To follow a Track that is not built in, run **Touching Grass: Open Track** and c
 
 ## Develop
 
-Requires Node.js 20+ and VS Code 1.90+.
+Requires Node.js 22+ and VS Code 1.90+.
 
 ```sh
 npm ci
